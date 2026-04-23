@@ -1,0 +1,29 @@
+{
+  "name": "codedock",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interview platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev -w apps/web",
+    "dev:server": "npm run dev -w apps/server",
+    "dev:runner": "npm run dev -w apps/runner",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NoahSpina/CodeDock.git"
+  },
+  "author": "Noah Spina, Mia Petrolino, Johnathan Vu, Vinci Li, Edzel Roque",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/NoahSpina/CodeDock/issues"
+  },
+  "homepage": "https://github.com/NoahSpina/CodeDock#readme"
+}

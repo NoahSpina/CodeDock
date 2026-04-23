@@ -1,0 +1,57 @@
+# Default ignored files
+/shelf/
+/.idea/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+# Datasource local storage ignored files
+/dataSources/
+/dataSources.local.xml
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+bin/
+
+# Environment variables (not sure if we should push these)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.sample
+!.env.example
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs
+*.log
+
+# IDE - WebStorm / JetBrains
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# IDE - VS Code
+.vscode/
+!.vscode/extensions.json
+.history/
+
+# OS Metadata
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# Other
+coverage
