@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import app from "./app.js";
+import { registerSocketHandlers } from "./sockets/index.js";
 
 dotenv.config();
 
@@ -11,18 +12,12 @@ const server = http.createServer(app);
 
 const io = new SocketIOServer(server, {
     cors: {
-        origin: "*",
+        origin: "http://localhost:3000",
         methods: ["GET", "POST"],
     },
 });
 
-io.on("connection", (socket) => {
-    console.log(`Socket connected: ${socket.id}`);
-
-    socket.on("disconnect", () => {
-        console.log(`Socket disconnected: ${socket.id}`);
-    });
-});
+registerSocketHandlers(io);
 
 server.listen(PORT, () => {
     console.log(`Server listening on port ${PORT}`);
