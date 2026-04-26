@@ -10,6 +10,17 @@ type JoinRoomPayload = {
     username: string;
 };
 
+type ChatMessagePayload = {
+    roomId: string;
+    username: string;
+    message: string;
+};
+
+type CodeChangePayload = {
+    roomId: string;
+    code: string;
+};
+
 export function registerSocketHandlers(io: SocketIOServer) {
     io.on("connection", (socket: Socket) => {
         console.log(`Socket connected: ${socket.id}`);
@@ -23,6 +34,34 @@ export function registerSocketHandlers(io: SocketIOServer) {
             });
 
             io.to(roomId).emit("room:participants", getParticipants(roomId));
+        });
+
+        socket.on(
+            "room:chat-message",
+            ({ roomId, username, message }: ChatMessagePayload) => {
+                const trimmedMessage = message?.trim();
+
+                if (!roomId || !trimmedMessage) {
+                    return;
+                }
+
+                io.to(roomId).emit("room:chat-message", {
+                    socketId: socket.id,
+                    username: username?.trim() || "Anonymous",
+                    message: trimmedMessage,
+                    sentAt: new Date().toISOString(),
+                });
+            },
+        );
+
+        socket.on("room:code-change", ({ roomId, code }: CodeChangePayload) => {
+            if (!roomId) {
+                return;
+            }
+
+            socket.to(roomId).emit("room:code-change", {
+                code,
+            });
         });
 
         socket.on("disconnect", () => {
