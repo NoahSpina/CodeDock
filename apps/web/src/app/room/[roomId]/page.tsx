@@ -94,7 +94,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 .join("\n");
 
             setOutput(
-                `${result.ranBy} ran the code:\n\n${
+                `${result.ranBy} ran the code. Output:\n\n${
                     finalOutput || `Process exited with code ${result.exitCode}`
                 }`,
             );
@@ -142,12 +142,6 @@ export default function RoomPage({ params }: RoomPageProps) {
                 setOutput(result.error || "Something went wrong.");
                 return;
             }
-
-            const finalOutput = [result.output, result.error]
-                .filter(Boolean)
-                .join("\n");
-
-            setOutput(finalOutput || `Process exited with code ${result.exitCode}`);
         } catch {
             setOutput("Failed to connect to server.");
         } finally {

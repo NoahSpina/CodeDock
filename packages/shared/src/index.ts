@@ -61,7 +61,6 @@ export interface ClientToServerEvents {
     "room:join": (payload: JoinRoomPayload) => void;
     "room:chat-message": (payload: ChatMessagePayload) => void;
     "room:code-change": (payload: CodeChangePayload) => void;
-    "room:execution-result": (payload: ExecutionFinishedMessage) => void;
 }
 
 export interface ServerToClientEvents {
