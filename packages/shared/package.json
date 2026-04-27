@@ -2,8 +2,16 @@
   "name": "@codedock/shared",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    }
+  },
   "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

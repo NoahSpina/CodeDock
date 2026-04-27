@@ -2,26 +2,15 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import type {
+    ChatMessage,
+    CodeChangeMessage,
+    Participant,
+    Room,
+    ExecutionResult,
+    ExecutionFinishedMessage
+} from "@codedock/shared";
 import { socket } from "@/lib/socket";
-
-type Participant = {
-    socketId: string;
-    username: string;
-};
-
-type Room = {
-    roomId: string;
-    title: string;
-    inviteCode: string;
-    createdAt: string;
-};
-
-type ChatMessage = {
-    socketId: string;
-    username: string;
-    message: string;
-    sentAt: string;
-};
 
 type RoomPageProps = {
     params: Promise<{
@@ -95,18 +84,32 @@ export default function RoomPage({ params }: RoomPageProps) {
             setMessages((currentMessages) => [...currentMessages, message]);
         }
 
-        function handleCodeChange(payload: { code: string }) {
+        function handleCodeChange(payload: CodeChangeMessage) {
             setCode(payload.code);
+        }
+
+        function handleExecutionResult(result: ExecutionFinishedMessage) {
+            const finalOutput = [result.output, result.error]
+                .filter(Boolean)
+                .join("\n");
+
+            setOutput(
+                `${result.ranBy} ran the code. Output:\n\n${
+                    finalOutput || `Process exited with code ${result.exitCode}`
+                }`,
+            );
         }
 
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
+        socket.on("room:execution-result", handleExecutionResult);
 
         return () => {
             socket.off("room:participants", handleParticipants);
             socket.off("room:chat-message", handleChatMessage);
             socket.off("room:code-change", handleCodeChange);
+            socket.off("room:execution-result", handleExecutionResult);
         };
     }, [roomId]);
 
@@ -125,21 +128,20 @@ export default function RoomPage({ params }: RoomPageProps) {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ code }),
+                body: JSON.stringify({
+                    language: "python",
+                    code,
+                    roomId,
+                    username,
+                }),
             });
 
-            const result = await res.json();
+            const result = (await res.json()) as ExecutionResult;
 
             if (!res.ok) {
                 setOutput(result.error || "Something went wrong.");
                 return;
             }
-
-            const finalOutput = [result.output, result.error]
-                .filter(Boolean)
-                .join("\n");
-
-            setOutput(finalOutput || `Process exited with code ${result.exitCode}`);
         } catch {
             setOutput("Failed to connect to server.");
         } finally {

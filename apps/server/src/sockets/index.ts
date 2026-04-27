@@ -1,28 +1,26 @@
 import type { Server as SocketIOServer, Socket } from "socket.io";
+import type {
+    ChatMessagePayload,
+    ClientToServerEvents,
+    CodeChangePayload,
+    JoinRoomPayload,
+    ServerToClientEvents,
+} from "@codedock/shared";
 import {
     addParticipant,
     removeParticipant,
     getParticipants,
 } from "./presenceStore.js";
 
-type JoinRoomPayload = {
-    roomId: string;
-    username: string;
-};
+type CodeDockSocketServer = SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents
+>;
 
-type ChatMessagePayload = {
-    roomId: string;
-    username: string;
-    message: string;
-};
+type CodeDockSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-type CodeChangePayload = {
-    roomId: string;
-    code: string;
-};
-
-export function registerSocketHandlers(io: SocketIOServer) {
-    io.on("connection", (socket: Socket) => {
+export function registerSocketHandlers(io: CodeDockSocketServer) {
+    io.on("connection", (socket: CodeDockSocket) => {
         console.log(`Socket connected: ${socket.id}`);
 
         socket.on("room:join", ({ roomId, username }: JoinRoomPayload) => {
