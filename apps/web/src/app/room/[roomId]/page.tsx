@@ -41,6 +41,8 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [code, setCode] = useState("");
     const [error, setError] = useState("");
     const [username, setUsername] = useState("");
+    const [output, setOutput] = useState("");
+    const [isRunning, setIsRunning] = useState(false);
 
     useEffect(() => {
         async function resolveParamsAndFetchRoom() {
@@ -108,6 +110,43 @@ export default function RoomPage({ params }: RoomPageProps) {
         };
     }, [roomId]);
 
+    async function handleRunCode() {
+        if (!code.trim()) {
+            setOutput("No code to run.");
+            return;
+        }
+
+        setIsRunning(true);
+        setOutput("Running...");
+
+        try {
+            const res = await fetch(`${SERVER_URL}/api/run/python`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ code }),
+            });
+
+            const result = await res.json();
+
+            if (!res.ok) {
+                setOutput(result.error || "Something went wrong.");
+                return;
+            }
+
+            const finalOutput = [result.output, result.error]
+                .filter(Boolean)
+                .join("\n");
+
+            setOutput(finalOutput || `Process exited with code ${result.exitCode}`);
+        } catch {
+            setOutput("Failed to connect to server.");
+        } finally {
+            setIsRunning(false);
+        }
+    }
+
     function handleSendMessage(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
@@ -159,7 +198,17 @@ export default function RoomPage({ params }: RoomPageProps) {
 
                 <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
                     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 min-h-[500px]">
-                        <h2 className="text-xl font-semibold">Code Editor</h2>
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xl font-semibold">Code Editor</h2>
+
+                            <button
+                                onClick={handleRunCode}
+                                disabled={isRunning}
+                                className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                            >
+                                {isRunning ? "Running..." : "Run Python"}
+                            </button>
+                        </div>
                         <textarea
                             value={code}
                             onChange={(event) => {
@@ -179,21 +228,10 @@ export default function RoomPage({ params }: RoomPageProps) {
 
                     <div className="grid gap-6">
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                            <h2 className="text-xl font-semibold">Participants</h2>
-                            <div className="mt-4 space-y-2">
-                                {participants.length === 0 ? (
-                                    <p className="text-slate-400">No participants yet.</p>
-                                ) : (
-                                    participants.map((participant) => (
-                                        <div
-                                            key={participant.socketId}
-                                            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200"
-                                        >
-                                            {participant.username}
-                                        </div>
-                                    ))
-                                )}
-                            </div>
+                            <h2 className="text-xl font-semibold">Output</h2>
+                            <pre className="mt-4 min-h-[120px] whitespace-pre-wrap rounded-xl border border-slate-700 bg-slate-950 p-4 font-mono text-sm text-slate-300">
+                                {output || "Execution output will appear here."}
+                            </pre>
                         </div>
 
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
@@ -234,13 +272,25 @@ export default function RoomPage({ params }: RoomPageProps) {
                             </form>
                         </div>
 
+
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                            <h2 className="text-xl font-semibold">Output</h2>
-                            <div className="mt-4 text-slate-400">
-                                Execution output placeholder
+                            <h2 className="text-xl font-semibold">Participants</h2>
+                            <div className="mt-4 space-y-2">
+                                {participants.length === 0 ? (
+                                    <p className="text-slate-400">No participants yet.</p>
+                                ) : (
+                                    participants.map((participant) => (
+                                        <div
+                                            key={participant.socketId}
+                                            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-200"
+                                        >
+                                            {participant.username}
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
-                    </div>
+                        </div>
                 </section>
             </div>
         </main>

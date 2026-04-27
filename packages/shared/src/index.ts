@@ -1,24 +1,25 @@
+// for later use when typing is concrete
+
+export interface Participant {
+    socketId: string;
+    username: string;
+}
+
 export interface ChatMessage {
-    senderId: string;
-    senderName: string;
+    socketId: string;
+    username: string;
     message: string;
-    timestamp: string;
+    sentAt: string;
 }
 
 export interface ExecutionRequest {
     language: "python";
     code: string;
-    stdin?: string;
     roomId: string;
-    sessionId: string;
-    submittedBy: string;
 }
 
 export interface ExecutionResult {
-    stdout: string;
-    stderr: string;
-    exitCode: number;
-    runtimeMs: number;
-    timedOut: boolean;
-    createdAt: string;
+    output: string;
+    error: string;
+    exitCode: number | null;
 }
