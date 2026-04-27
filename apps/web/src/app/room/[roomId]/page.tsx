@@ -8,6 +8,7 @@ import type {
     Participant,
     Room,
     ExecutionResult,
+    ExecutionFinishedMessage
 } from "@codedock/shared";
 import { socket } from "@/lib/socket";
 
@@ -87,14 +88,28 @@ export default function RoomPage({ params }: RoomPageProps) {
             setCode(payload.code);
         }
 
+        function handleExecutionResult(result: ExecutionFinishedMessage) {
+            const finalOutput = [result.output, result.error]
+                .filter(Boolean)
+                .join("\n");
+
+            setOutput(
+                `${result.ranBy} ran the code:\n\n${
+                    finalOutput || `Process exited with code ${result.exitCode}`
+                }`,
+            );
+        }
+
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
+        socket.on("room:execution-result", handleExecutionResult);
 
         return () => {
             socket.off("room:participants", handleParticipants);
             socket.off("room:chat-message", handleChatMessage);
             socket.off("room:code-change", handleCodeChange);
+            socket.off("room:execution-result", handleExecutionResult);
         };
     }, [roomId]);
 
@@ -113,7 +128,12 @@ export default function RoomPage({ params }: RoomPageProps) {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ code }),
+                body: JSON.stringify({
+                    language: "python",
+                    code,
+                    roomId,
+                    username,
+                }),
             });
 
             const result = (await res.json()) as ExecutionResult;

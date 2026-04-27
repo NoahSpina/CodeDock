@@ -49,14 +49,24 @@ export interface ExecutionResult {
     exitCode: number | null;
 }
 
+export interface ExecutionFinishedMessage {
+    output: string;
+    error: string;
+    exitCode: number | null;
+    ranBy: string;
+    sentAt: string;
+}
+
 export interface ClientToServerEvents {
     "room:join": (payload: JoinRoomPayload) => void;
     "room:chat-message": (payload: ChatMessagePayload) => void;
     "room:code-change": (payload: CodeChangePayload) => void;
+    "room:execution-result": (payload: ExecutionFinishedMessage) => void;
 }
 
 export interface ServerToClientEvents {
     "room:participants": (participants: Participant[]) => void;
     "room:chat-message": (message: ChatMessage) => void;
     "room:code-change": (payload: CodeChangeMessage) => void;
+    "room:execution-result": (payload: ExecutionFinishedMessage) => void;
 }

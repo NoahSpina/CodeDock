@@ -7,15 +7,13 @@ import type {
 } from "@codedock/shared";
 import app from "./app.js";
 import { registerSocketHandlers } from "./sockets/index.js";
-import runRoutes from "./routes/run.routes.js";
+import { createRunRoutes } from "./routes/run.routes.js";
 
 dotenv.config();
 
 const PORT = process.env.PORT || 4000;
 
 const server = http.createServer(app);
-
-app.use("/api/run", runRoutes);
 
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(
     server,
@@ -26,6 +24,8 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(
         },
     },
 );
+
+app.use("/api/run", createRunRoutes(io));
 
 registerSocketHandlers(io);
 

@@ -1,36 +1,61 @@
-import express from "express";
-import type { ExecutionRequest, ExecutionResult } from "@codedock/shared";
+import { Router } from "express";
+import type { Server as SocketIOServer } from "socket.io";
+import type {
+    ClientToServerEvents,
+    ExecutionRequest,
+    ExecutionResult,
+    ServerToClientEvents,
+} from "@codedock/shared";
 
-const router = express.Router();
+type CodeDockSocketServer = SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents
+>;
 
 const RUNNER_URL = process.env.RUNNER_URL || "http://localhost:5001";
 
-router.post("/python", async (req, res) => {
-    const { code } = req.body as Pick<ExecutionRequest, "code">;
+export function createRunRoutes(io: CodeDockSocketServer) {
+    const router = Router();
 
-    if (!code || typeof code !== "string") {
-        return res.status(400).json({
-            error: "Code is required",
-        });
-    }
+    router.post("/python", async (req, res) => {
+        const { code, roomId, username } = req.body as ExecutionRequest & {
+            username?: string;
+        };
 
-    try {
-        const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ code }),
-        });
+        if (!code || typeof code !== "string") {
+            return res.status(400).json({
+                error: "Code is required",
+            });
+        }
 
-        const result = (await runnerResponse.json()) as ExecutionResult;
+        try {
+            const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ code }),
+            });
 
-        return res.status(runnerResponse.status).json(result);
-    } catch (error) {
-        return res.status(500).json({
-            error: "Failed to connect to runner",
-        });
-    }
-});
+            const result = (await runnerResponse.json()) as ExecutionResult;
 
-export default router;
+            if (roomId) {
+                io.to(roomId).emit("room:execution-result", {
+                    output: result.output,
+                    error: result.error,
+                    exitCode: result.exitCode,
+                    ranBy: username?.trim() || "Anonymous",
+                    sentAt: new Date().toISOString(),
+                });
+            }
+
+            return res.status(runnerResponse.status).json(result);
+        } catch (error) {
+            return res.status(500).json({
+                error: "Failed to connect to runner",
+            });
+        }
+    });
+
+    return router;
+}
