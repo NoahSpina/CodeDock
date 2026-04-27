@@ -2,26 +2,14 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import type {
+    ChatMessage,
+    CodeChangeMessage,
+    Participant,
+    Room,
+    ExecutionResult,
+} from "@codedock/shared";
 import { socket } from "@/lib/socket";
-
-type Participant = {
-    socketId: string;
-    username: string;
-};
-
-type Room = {
-    roomId: string;
-    title: string;
-    inviteCode: string;
-    createdAt: string;
-};
-
-type ChatMessage = {
-    socketId: string;
-    username: string;
-    message: string;
-    sentAt: string;
-};
 
 type RoomPageProps = {
     params: Promise<{
@@ -95,7 +83,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             setMessages((currentMessages) => [...currentMessages, message]);
         }
 
-        function handleCodeChange(payload: { code: string }) {
+        function handleCodeChange(payload: CodeChangeMessage) {
             setCode(payload.code);
         }
 
@@ -128,7 +116,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 body: JSON.stringify({ code }),
             });
 
-            const result = await res.json();
+            const result = (await res.json()) as ExecutionResult;
 
             if (!res.ok) {
                 setOutput(result.error || "Something went wrong.");

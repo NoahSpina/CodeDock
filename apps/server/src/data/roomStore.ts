@@ -1,9 +1,4 @@
-type Room = {
-    roomId: string;
-    title: string;
-    inviteCode: string;
-    createdAt: string;
-};
+import type { Room } from "@codedock/shared";
 
 const rooms = new Map<string, Room>();
 
@@ -39,5 +34,3 @@ export function getRoomByInviteCode(inviteCode: string): Room | undefined {
     }
     return undefined;
 }
-
-export type { Room };

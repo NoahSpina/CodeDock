@@ -1,7 +1,4 @@
-type Participant = {
-    socketId: string;
-    username: string;
-};
+import type { Participant } from "@codedock/shared";
 
 const roomParticipants = new Map<string, Participant[]>();
 

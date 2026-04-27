@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { spawn } from "child_process";
+import type { ExecutionRequest, ExecutionResult } from "@codedock/shared";
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -9,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post("/run/python", (req, res) => {
-    const { code } = req.body;
+    const { code } = req.body as Pick<ExecutionRequest, "code">;
 
     if (!code || typeof code !== "string") {
         return res.status(400).json({
@@ -31,11 +32,13 @@ app.post("/run/python", (req, res) => {
     });
 
     pythonProcess.on("close", (exitCode) => {
-        res.json({
+        const result: ExecutionResult = {
             exitCode,
             output,
             error: errorOutput,
-        });
+        };
+
+        res.json(result);
     });
 });
 

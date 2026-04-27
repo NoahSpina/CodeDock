@@ -8,6 +8,9 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@codedock/shared": "1.0.0"
+  },
   "devDependencies": {
     "tsx": "^4.21.0"
   }
