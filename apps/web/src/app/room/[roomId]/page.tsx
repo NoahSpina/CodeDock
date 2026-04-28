@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import Editor from "@monaco-editor/react";
 import type {
     ChatMessage,
     CodeChangeMessage,
@@ -28,6 +29,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState("");
     const [code, setCode] = useState("");
+    const [stdin, setStdin] = useState("");
     const [error, setError] = useState("");
     const [username, setUsername] = useState("");
     const [output, setOutput] = useState("");
@@ -93,9 +95,13 @@ export default function RoomPage({ params }: RoomPageProps) {
                 .filter(Boolean)
                 .join("\n");
 
+            const exitInfo = result.timedOut 
+                ? `Process timed out after 5 seconds.` 
+                : `Process exited with code ${result.exitCode}${result.runtimeMs !== undefined ? ` in ${result.runtimeMs}ms` : ""}`;
+
             setOutput(
                 `${result.ranBy} ran the code. Output:\n\n${
-                    finalOutput || `Process exited with code ${result.exitCode}`
+                    finalOutput ? `${finalOutput}\n\n${exitInfo}` : exitInfo
                 }`,
             );
         }
@@ -133,6 +139,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     code,
                     roomId,
                     username,
+                    input: stdin,
                 }),
             });
 
@@ -211,21 +218,40 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 {isRunning ? "Running..." : "Run Python"}
                             </button>
                         </div>
-                        <textarea
-                            value={code}
-                            onChange={(event) => {
-                                const updatedCode = event.target.value;
-                                setCode(updatedCode);
+                        <div className="mt-4 h-[500px] w-full overflow-hidden rounded-xl border border-slate-700">
+                            <Editor
+                                height="100%"
+                                defaultLanguage="python"
+                                theme="vs-dark"
+                                value={code}
+                                onChange={(value) => {
+                                    const updatedCode = value || "";
+                                    setCode(updatedCode);
 
-                                socket.emit("room:code-change", {
-                                    roomId,
-                                    code: updatedCode,
-                                });
-                            }}
-                            placeholder="Start coding here..."
-                            spellCheck={false}
-                            className="mt-4 min-h-[400px] w-full resize-none rounded-xl border border-slate-700 bg-slate-950 p-4 font-mono text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
-                        />
+                                    socket.emit("room:code-change", {
+                                        roomId,
+                                        code: updatedCode,
+                                    });
+                                }}
+                                options={{
+                                    minimap: { enabled: false },
+                                    fontSize: 14,
+                                    padding: { top: 16 },
+                                    scrollBeyondLastLine: false,
+                                }}
+                            />
+                        </div>
+
+                        <div className="mt-6">
+                            <h3 className="text-lg font-medium text-slate-200">Standard Input</h3>
+                            <textarea
+                                value={stdin}
+                                onChange={(e) => setStdin(e.target.value)}
+                                placeholder="Enter input here (optional)..."
+                                spellCheck={false}
+                                className="mt-2 h-[100px] w-full resize-none rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
+                            />
+                        </div>
                     </div>
 
                     <div className="grid gap-6">

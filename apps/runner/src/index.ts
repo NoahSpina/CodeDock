@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 app.post("/run/python", (req, res) => {
-    const { code } = req.body as Pick<ExecutionRequest, "code">;
+    const { code, input } = req.body as Pick<ExecutionRequest, "code" | "input">;
 
     if (!code || typeof code !== "string") {
         return res.status(400).json({
@@ -18,10 +18,22 @@ app.post("/run/python", (req, res) => {
         });
     }
 
+    const startTime = Date.now();
     const pythonProcess = spawn("python3", ["-c", code]);
+
+    if (input && typeof input === "string") {
+        pythonProcess.stdin.write(input);
+        pythonProcess.stdin.end();
+    }
 
     let output = "";
     let errorOutput = "";
+    let isTimedOut = false;
+
+    const timeoutId = setTimeout(() => {
+        isTimedOut = true;
+        pythonProcess.kill("SIGKILL");
+    }, 5000);
 
     pythonProcess.stdout.on("data", (data) => {
         output += data.toString();
@@ -32,10 +44,15 @@ app.post("/run/python", (req, res) => {
     });
 
     pythonProcess.on("close", (exitCode) => {
+        clearTimeout(timeoutId);
+        const runtimeMs = Date.now() - startTime;
+
         const result: ExecutionResult = {
-            exitCode,
+            exitCode: isTimedOut ? null : exitCode,
             output,
-            error: errorOutput,
+            error: isTimedOut ? "Execution timed out after 5 seconds." : errorOutput,
+            timedOut: isTimedOut,
+            runtimeMs,
         };
 
         res.json(result);

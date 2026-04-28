@@ -18,7 +18,7 @@ export function createRunRoutes(io: CodeDockSocketServer) {
     const router = Router();
 
     router.post("/python", async (req, res) => {
-        const { code, roomId, username } = req.body as ExecutionRequest & {
+        const { code, roomId, username, input } = req.body as ExecutionRequest & {
             username?: string;
         };
 
@@ -34,7 +34,7 @@ export function createRunRoutes(io: CodeDockSocketServer) {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ code }),
+                body: JSON.stringify({ code, input }),
             });
 
             const result = (await runnerResponse.json()) as ExecutionResult;
@@ -44,6 +44,8 @@ export function createRunRoutes(io: CodeDockSocketServer) {
                     output: result.output,
                     error: result.error,
                     exitCode: result.exitCode,
+                    timedOut: result.timedOut,
+                    runtimeMs: result.runtimeMs,
                     ranBy: username?.trim() || "Anonymous",
                     sentAt: new Date().toISOString(),
                 });

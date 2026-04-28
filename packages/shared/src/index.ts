@@ -41,12 +41,15 @@ export interface ExecutionRequest {
     language: "python";
     code: string;
     roomId?: string;
+    input?: string;
 }
 
 export interface ExecutionResult {
     output: string;
     error: string;
     exitCode: number | null;
+    timedOut?: boolean;
+    runtimeMs?: number;
 }
 
 export interface ExecutionFinishedMessage {
@@ -55,6 +58,8 @@ export interface ExecutionFinishedMessage {
     exitCode: number | null;
     ranBy: string;
     sentAt: string;
+    timedOut?: boolean;
+    runtimeMs?: number;
 }
 
 export interface ClientToServerEvents {
