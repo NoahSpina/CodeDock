@@ -12,38 +12,52 @@ CodeDock is a real-time technical interview platform where interviewers and cand
 - Docker
 
 ## Monorepo Structure
-- apps/web -> Next.js frontend
-- apps/server -> API + Socket.io server
-- apps/runner -> Docker execution service
-- packages/shared -> shared TypeScript types
 
-## Quick Start (Local)
-1. Install dependencies:
-   - `npm install`
-2. Copy environment templates:
-   - `cp apps/web/.env.example apps/web/.env.local`
-   - `cp apps/server/.env.example apps/server/.env`
-   - `cp apps/runner/.env.example apps/runner/.env`
-3. Run services in separate terminals:
-   - `npm run dev:web`
-   - `npm run dev:server`
-   - `npm run dev:runner`
+- `apps/web` -> Next.js frontend
+- `apps/server` -> API + Socket.io server
+- `apps/runner` -> Docker execution service
+- `packages/shared` -> shared TypeScript types
 
-## Quick Start (Docker Compose)
-- Run all services (web, server, runner, mongo):
-  - `docker compose up --build`
-- Stop services:
-  - `docker compose down`
+## Prerequisites
 
-## Environment Files
-- `apps/web/.env.example`
-- `apps/server/.env.example`
-- `apps/runner/.env.example`
+Before locally running the project, make sure you have:
 
-## Initial Scope
-- Authentication
-- Room creation / joining
-- Real-time editor
-- Real-time chat
-- Python execution
-- Session history
+- Docker Desktop installed and running
+- Node.js installed locally if you want to run without Docker Compose
+- npm installed
+
+The runner service uses Docker to execute submitted Python code inside isolated containers, so Docker must be running.
+
+## Quick Start with Docker Compose
+
+From the project root, run:
+
+```bash
+docker compose up
+```
+
+## Local Development without Docker Compose
+
+Run: 
+```bash
+npm install
+```
+
+Start MongoDB. 
+
+Start the following services in **three** separate terminals at the project root folder.
+
+### Web Frontend (http://localhost:3000)
+```bash
+npm run dev:web
+```
+
+### Server (http://localhost:4000)
+```bash
+npm run dev:server
+```
+
+### Runner Service (http://localhost:5001)
+```bash
+npm run dev:runner
+```

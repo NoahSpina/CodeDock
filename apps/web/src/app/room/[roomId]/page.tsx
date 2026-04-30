@@ -95,13 +95,13 @@ export default function RoomPage({ params }: RoomPageProps) {
                 .filter(Boolean)
                 .join("\n");
 
-            const exitInfo = result.timedOut 
-                ? `Process timed out after 5 seconds.` 
+            const exitInfo = result.timedOut
+                ? `Process timed out.`
                 : `Process exited with code ${result.exitCode}${result.runtimeMs !== undefined ? ` in ${result.runtimeMs}ms` : ""}`;
 
             setOutput(
                 `${result.ranBy} ran the code. Output:\n\n${
-                    finalOutput ? `${finalOutput}\n\n${exitInfo}` : exitInfo
+                    finalOutput ? `${finalOutput}\n${exitInfo}` : exitInfo
                 }`,
             );
         }
