@@ -13,6 +13,11 @@ import {
 } from "./presenceStore.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
 import { setRoomPrompt, getRoomById, setCreatorSocketId } from "../data/roomStore.js";
+import {
+    recordCodeChanged,
+    recordParticipantJoined,
+    recordPromptSelected,
+} from "../data/historyStore.js";
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
@@ -25,23 +30,30 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
     io.on("connection", (socket: CodeDockSocket) => {
         console.log(`Socket connected: ${socket.id}`);
 
-        socket.on("room:join", ({ roomId, username }: JoinRoomPayload) => {
+        socket.on("room:join", ({ roomId, username, guestId }: JoinRoomPayload) => {
+            const room = getRoomById(roomId);
+            if (!room || room.status === "inactive") {
+                return;
+            }
+
             socket.join(roomId);
 
             addParticipant(roomId, {
                 socketId: socket.id,
                 username: username?.trim() || "Anonymous",
+                guestId,
             });
 
             io.to(roomId).emit("room:participants", getParticipants(roomId));
 
-            const room = getRoomById(roomId);
-
-            if (room && !room.creatorSocketId) {
+            if (room.creatorGuestId && room.creatorGuestId === guestId) {
+                setCreatorSocketId(roomId, socket.id);
+            } else if (!room.creatorSocketId && !room.creatorGuestId) {
                 setCreatorSocketId(roomId, socket.id);
             }
 
             const isCreator = getRoomById(roomId)?.creatorSocketId === socket.id;
+            recordParticipantJoined(room, { guestId, username });
 
             if (room?.selectedPromptId) {
                 const prompt = CODING_PROMPTS.find(
@@ -80,6 +92,8 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                 return;
             }
 
+            recordCodeChanged(roomId, code);
+
             socket.to(roomId).emit("room:code-change", {
                 code,
             });
@@ -95,6 +109,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
             if (!prompt) return;
 
             setRoomPrompt(roomId, promptId);
+            recordPromptSelected(roomId, promptId, prompt);
             io.to(roomId).emit("prompt:updated", { promptId, prompt });
         });
 
@@ -102,6 +117,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
             const room = getRoomById(roomId);
             if (room?.creatorSocketId !== socket.id) return;
             setRoomPrompt(roomId, null);
+            recordPromptSelected(roomId, null, null);
             io.to(roomId).emit("prompt:updated", { promptId: null, prompt: null });
         });
 

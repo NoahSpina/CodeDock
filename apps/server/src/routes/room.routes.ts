@@ -3,15 +3,23 @@ import {
     createRoom,
     getRoomById,
     getRoomByInviteCode,
-    setRoomPrompt
+    setRoomPrompt,
+    setRoomStatus
 } from "../data/roomStore.js";
+import {
+    createHistorySession,
+    recordParticipantJoined,
+    recordPromptSelected,
+    recordRoomStatus,
+} from "../data/historyStore.js";
 
 import { CODING_PROMPTS } from "../data/prompts.js";
+import type { Actor, RoomStatus } from "@codedock/shared";
 
 const router = Router();
 
 router.post("/", (req, res) => {
-    const { title } = req.body as { title?: string };
+    const { title, guestId, username, userId } = req.body as { title?: string } & Partial<Actor>;
 
     if (!title || title.trim().length === 0) {
         return res.status(400).json({
@@ -19,13 +27,15 @@ router.post("/", (req, res) => {
         });
     }
 
-    const room = createRoom(title.trim(), "");
+    const actor = { guestId, username, userId };
+    const room = createRoom(title.trim(), "", actor);
+    createHistorySession(room, actor);
 
     return res.status(201).json(room);
 });
 
 router.post("/join", (req, res) => {
-    const { inviteCode } = req.body as { inviteCode?: string };
+    const { inviteCode, guestId, username, userId } = req.body as { inviteCode?: string } & Partial<Actor>;
 
     if (!inviteCode || inviteCode.trim().length === 0) {
         return res.status(400).json({
@@ -40,6 +50,14 @@ router.post("/join", (req, res) => {
             error: "Room not found",
         });
     }
+
+    if (room.status === "inactive") {
+        return res.status(403).json({
+            error: "This room is inactive",
+        });
+    }
+
+    recordParticipantJoined(room, { guestId, username, userId });
 
     return res.json(room);
 });
@@ -74,8 +92,32 @@ router.patch("/:roomId/prompt", (req, res) => {
         }
     }
 
-    const updated = setRoomPrompt(roomId, promptId ?? null);
+    const nextPromptId = promptId ?? null;
+    const prompt = nextPromptId
+        ? CODING_PROMPTS.find((p: { id: string }) => p.id === nextPromptId) ?? null
+        : null;
+    const updated = setRoomPrompt(roomId, nextPromptId);
+    recordPromptSelected(roomId, nextPromptId, prompt);
     return res.json({ roomId, selectedPromptId: updated?.selectedPromptId ?? null });
+});
+
+router.patch("/:roomId/status", (req, res) => {
+    const { roomId } = req.params;
+    const { status } = req.body as { status?: RoomStatus };
+
+    if (status !== "active" && status !== "inactive") {
+        return res.status(400).json({ error: "Status must be active or inactive" });
+    }
+
+    const room = getRoomById(roomId);
+    if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+    }
+
+    const updated = setRoomStatus(roomId, status);
+    recordRoomStatus(roomId, status);
+
+    return res.json(updated);
 });
 
 export default router;

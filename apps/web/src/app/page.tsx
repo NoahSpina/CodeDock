@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { getOrCreateActor } from "@/lib/identity";
 
 const SERVER_URL =
     process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
@@ -20,12 +22,13 @@ export default function Home() {
         setLoadingCreate(true);
 
         try {
+            const actor = getOrCreateActor();
             const res = await fetch(`${SERVER_URL}/api/rooms`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ title }),
+                body: JSON.stringify({ title, ...actor }),
             });
 
             const data = await res.json();
@@ -47,12 +50,13 @@ export default function Home() {
         setLoadingJoin(true);
 
         try {
+            const actor = getOrCreateActor();
             const res = await fetch(`${SERVER_URL}/api/rooms/join`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ inviteCode }),
+                body: JSON.stringify({ inviteCode, ...actor }),
             });
 
             const data = await res.json();
@@ -125,6 +129,21 @@ export default function Home() {
                                 {error}
                             </p>
                         ) : null}
+
+                        <div className="grid gap-3 border-t border-slate-800 pt-5 sm:grid-cols-2">
+                            <Link
+                                href="/history/interviewer"
+                                className="rounded-lg border border-slate-700 px-4 py-2 text-center font-medium text-slate-100 hover:border-blue-500"
+                            >
+                                Interviewer History
+                            </Link>
+                            <Link
+                                href="/history/candidate"
+                                className="rounded-lg border border-slate-700 px-4 py-2 text-center font-medium text-slate-100 hover:border-blue-500"
+                            >
+                                Candidate History
+                            </Link>
+                        </div>
                     </div>
                 </section>
             </div>

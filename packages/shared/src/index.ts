@@ -1,6 +1,15 @@
 export interface Participant {
     socketId: string;
     username: string;
+    guestId?: string;
+}
+
+export type RoomStatus = "active" | "inactive";
+
+export interface Actor {
+    userId?: string;
+    guestId?: string;
+    username: string;
 }
 
 export interface Room {
@@ -9,7 +18,10 @@ export interface Room {
     inviteCode: string;
     createdAt: string;
     creatorSocketId: string;
+    creatorGuestId?: string;
+    creatorUsername?: string;
     selectedPromptId: string | null;
+    status: RoomStatus;
 }
 
 export interface ChatMessage {
@@ -22,6 +34,7 @@ export interface ChatMessage {
 export interface JoinRoomPayload {
     roomId: string;
     username: string;
+    guestId?: string;
 }
 
 export interface ChatMessagePayload {
@@ -33,6 +46,7 @@ export interface ChatMessagePayload {
 export interface CodeChangePayload {
     roomId: string;
     code: string;
+    guestId?: string;
 }
 
 export interface CodeChangeMessage {
@@ -44,6 +58,9 @@ export interface ExecutionRequest {
     code: string;
     roomId?: string;
     input?: string;
+    userId?: string;
+    username?: string;
+    guestId?: string;
 }
 
 export interface ExecutionResult {
@@ -90,4 +107,48 @@ export interface CodingPrompt {
     examples: { input: string; output: string; explanation?: string }[];
     constraints: string[];
     starterCode: string;
+}
+
+export interface InterviewExecution {
+    ranBy: Actor;
+    code: string;
+    stdin: string;
+    output: string;
+    error: string;
+    exitCode: number | null;
+    timedOut?: boolean;
+    runtimeMs?: number;
+    createdAt: string;
+}
+
+export interface InterviewSession {
+    roomId: string;
+    title: string;
+    inviteCode: string;
+    status: RoomStatus;
+    interviewer: Actor;
+    candidates: Actor[];
+    selectedPromptId: string | null;
+    selectedPrompt?: CodingPrompt | null;
+    finalCode: string;
+    stdin: string;
+    executions: InterviewExecution[];
+    createdAt: string;
+    updatedAt: string;
+    closedAt?: string;
+}
+
+export interface InterviewHistorySummary {
+    roomId: string;
+    title: string;
+    inviteCode: string;
+    status: RoomStatus;
+    interviewer: Actor;
+    candidates: Actor[];
+    selectedPromptId: string | null;
+    selectedPromptTitle?: string;
+    lastExecution?: InterviewExecution;
+    createdAt: string;
+    updatedAt: string;
+    closedAt?: string;
 }

@@ -15,6 +15,34 @@ const MAX_CODE_CHARS = 20000;
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
 
+async function ensureDockerImage(image: string) {
+    try {
+        await docker.getImage(image).inspect();
+    } catch (error) {
+        const statusCode = typeof error === "object" && error !== null && "statusCode" in error
+            ? (error as { statusCode?: number }).statusCode
+            : undefined;
+
+        if (statusCode !== 404) {
+            throw error;
+        }
+
+        console.log(`Pulling missing Docker image ${image}...`);
+        const stream = await docker.pull(image);
+
+        await new Promise<void>((resolve, reject) => {
+            docker.modem.followProgress(stream, (pullError) => {
+                if (pullError) {
+                    reject(pullError);
+                    return;
+                }
+
+                resolve();
+            });
+        });
+    }
+}
+
 function parseDockerLogs(buffer: Buffer) {
     let stdout = "";
     let stderr = "";
@@ -65,6 +93,8 @@ app.post("/run/python", async (req, res) => {
     let container: Docker.Container | undefined;
 
     try {
+        await ensureDockerImage(PYTHON_IMAGE);
+
         container = await docker.createContainer({
             Image: PYTHON_IMAGE,
             Cmd: ["python3", "-u", "-c", code],
