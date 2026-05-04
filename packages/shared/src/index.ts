@@ -8,6 +8,8 @@ export interface Room {
     title: string;
     inviteCode: string;
     createdAt: string;
+    creatorSocketId: string;
+    selectedPromptId: string | null;
 }
 
 export interface ChatMessage {
@@ -66,6 +68,8 @@ export interface ClientToServerEvents {
     "room:join": (payload: JoinRoomPayload) => void;
     "room:chat-message": (payload: ChatMessagePayload) => void;
     "room:code-change": (payload: CodeChangePayload) => void;
+    "prompt:select": (payload: { roomId: string; promptId: string }) => void;
+    "prompt:clear": (payload: { roomId: string }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -73,4 +77,17 @@ export interface ServerToClientEvents {
     "room:chat-message": (message: ChatMessage) => void;
     "room:code-change": (payload: CodeChangeMessage) => void;
     "room:execution-result": (payload: ExecutionFinishedMessage) => void;
+    "prompt:updated": (payload: { promptId: string | null; prompt: CodingPrompt | null }) => void;
+    "room:joined": (payload: { isCreator: boolean }) => void;
+}
+
+export interface CodingPrompt {
+    id: string;
+    title: string;
+    difficulty: "Easy" | "Medium" | "Hard";
+    category: string;
+    description: string;
+    examples: { input: string; output: string; explanation?: string }[];
+    constraints: string[];
+    starterCode: string;
 }

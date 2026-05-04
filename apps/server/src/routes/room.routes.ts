@@ -3,7 +3,10 @@ import {
     createRoom,
     getRoomById,
     getRoomByInviteCode,
+    setRoomPrompt
 } from "../data/roomStore.js";
+
+import { CODING_PROMPTS } from "../data/prompts.js";
 
 const router = Router();
 
@@ -16,7 +19,7 @@ router.post("/", (req, res) => {
         });
     }
 
-    const room = createRoom(title.trim());
+    const room = createRoom(title.trim(), "");
 
     return res.status(201).json(room);
 });
@@ -53,6 +56,26 @@ router.get("/:roomId", (req, res) => {
     }
 
     return res.json(room);
+});
+
+router.patch("/:roomId/prompt", (req, res) => {
+    const { roomId } = req.params;
+    const { promptId } = req.body as { promptId?: string | null };
+
+    const room = getRoomById(roomId);
+    if (!room) {
+        return res.status(404).json({ error: "Room not found" });
+    }
+
+    if (promptId !== null && promptId !== undefined) {
+        const exists = CODING_PROMPTS.some((p: { id: string }) => p.id === promptId);
+        if (!exists) {
+            return res.status(400).json({ error: "Unknown promptId" });
+        }
+    }
+
+    const updated = setRoomPrompt(roomId, promptId ?? null);
+    return res.json({ roomId, selectedPromptId: updated?.selectedPromptId ?? null });
 });
 
 export default router;

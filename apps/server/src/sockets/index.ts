@@ -11,6 +11,8 @@ import {
     removeParticipant,
     getParticipants,
 } from "./presenceStore.js";
+import { CODING_PROMPTS } from "../data/prompts.js";
+import { setRoomPrompt, getRoomById, setCreatorSocketId } from "../data/roomStore.js";
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
@@ -32,6 +34,27 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
             });
 
             io.to(roomId).emit("room:participants", getParticipants(roomId));
+
+            const room = getRoomById(roomId);
+
+            if (room && !room.creatorSocketId) {
+                setCreatorSocketId(roomId, socket.id);
+            }
+
+            const isCreator = getRoomById(roomId)?.creatorSocketId === socket.id;
+
+            if (room?.selectedPromptId) {
+                const prompt = CODING_PROMPTS.find(
+                    (p: { id: string }) => p.id === room.selectedPromptId
+                ) ?? null;
+                socket.emit("prompt:updated", {
+                    promptId: room.selectedPromptId,
+                    prompt,
+                });
+            }
+
+            socket.emit("room:joined", { isCreator });
+
         });
 
         socket.on(
@@ -60,6 +83,26 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
             socket.to(roomId).emit("room:code-change", {
                 code,
             });
+        });
+
+        socket.on("prompt:select", ({ roomId, promptId }: { roomId: string; promptId: string }) => {
+            const room = getRoomById(roomId);
+            if (room?.creatorSocketId !== socket.id) return;
+
+            const prompt = CODING_PROMPTS.find(
+                (p: { id: string }) => p.id === promptId
+            ) ?? null;
+            if (!prompt) return;
+
+            setRoomPrompt(roomId, promptId);
+            io.to(roomId).emit("prompt:updated", { promptId, prompt });
+        });
+
+        socket.on("prompt:clear", ({ roomId }: { roomId: string }) => {
+            const room = getRoomById(roomId);
+            if (room?.creatorSocketId !== socket.id) return;
+            setRoomPrompt(roomId, null);
+            io.to(roomId).emit("prompt:updated", { promptId: null, prompt: null });
         });
 
         socket.on("disconnect", () => {

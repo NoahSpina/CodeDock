@@ -9,9 +9,11 @@ import type {
     Participant,
     Room,
     ExecutionResult,
-    ExecutionFinishedMessage
+    ExecutionFinishedMessage,
+    CodingPrompt
 } from "@codedock/shared";
-import { socket } from "@/lib/socket";
+import { socket, onPromptUpdated, offPromptUpdated } from "@/lib/socket";
+import PromptPanel from "@/app/components/PromptPanel";
 
 type RoomPageProps = {
     params: Promise<{
@@ -34,6 +36,9 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [username, setUsername] = useState("");
     const [output, setOutput] = useState("");
     const [isRunning, setIsRunning] = useState(false);
+    const [isCreator, setIsCreator] = useState(false);
+    const [activePromptId, setActivePromptId] = useState<string | null>(null);
+    const [activePrompt, setActivePrompt] = useState<CodingPrompt | null>(null);
 
     useEffect(() => {
         async function resolveParamsAndFetchRoom() {
@@ -51,6 +56,14 @@ export default function RoomPage({ params }: RoomPageProps) {
 
                 const data = await res.json();
                 setRoom(data);
+
+                if (data.selectedPromptId) {
+                    setActivePromptId(data.selectedPromptId);
+                    fetch(`${SERVER_URL}/api/prompts/${data.selectedPromptId}`)
+                        .then((r) => r.json())
+                        .then((p: CodingPrompt) => setActivePrompt(p))
+                        .catch(() => { });
+                }
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Something went wrong");
             }
@@ -100,22 +113,34 @@ export default function RoomPage({ params }: RoomPageProps) {
                 : `Process exited with code ${result.exitCode}${result.runtimeMs !== undefined ? ` in ${result.runtimeMs}ms` : ""}`;
 
             setOutput(
-                `${result.ranBy} ran the code. Output:\n\n${
-                    finalOutput ? `${finalOutput}\n${exitInfo}` : exitInfo
+                `${result.ranBy} ran the code. Output:\n\n${finalOutput ? `${finalOutput}\n${exitInfo}` : exitInfo
                 }`,
             );
+        }
+
+        function handleRoomJoined({ isCreator }: { isCreator: boolean }) {
+            setIsCreator(isCreator);
+        }
+
+        function handlePromptUpdated({ promptId, prompt }: { promptId: string | null; prompt: CodingPrompt | null }) {
+            setActivePromptId(promptId);
+            setActivePrompt(prompt);
         }
 
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
         socket.on("room:execution-result", handleExecutionResult);
+        socket.on("room:joined", handleRoomJoined);
+        onPromptUpdated(handlePromptUpdated);
 
         return () => {
             socket.off("room:participants", handleParticipants);
             socket.off("room:chat-message", handleChatMessage);
             socket.off("room:code-change", handleCodeChange);
             socket.off("room:execution-result", handleExecutionResult);
+            socket.off("room:joined", handleRoomJoined);
+            offPromptUpdated(handlePromptUpdated);
         };
     }, [roomId]);
 
@@ -204,6 +229,15 @@ export default function RoomPage({ params }: RoomPageProps) {
                         You are: {username || "Loading..."}
                     </p>
                 </header>
+
+                <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 min-h-[200px]">
+                    <PromptPanel
+                        roomId={roomId}
+                        prompt={activePrompt}
+                        isCreator={isCreator}
+                        promptId={activePromptId}
+                    />
+                </div>
 
                 <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
                     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 min-h-[500px]">
@@ -318,7 +352,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 )}
                             </div>
                         </div>
-                        </div>
+                    </div>
                 </section>
             </div>
         </main>
