@@ -8,6 +8,7 @@ import type {
 import app from "./app.js";
 import { registerSocketHandlers } from "./sockets/index.js";
 import { createRunRoutes } from "./routes/run.routes.js";
+import { connectDB } from "./db/connection.js";
 
 dotenv.config();
 
@@ -19,7 +20,7 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(
     server,
     {
         cors: {
-            origin: "http://localhost:3000",
+            origin: process.env.CORS_ORIGIN || "http://localhost:3000",
             methods: ["GET", "POST"],
         },
     },
@@ -29,6 +30,13 @@ app.use("/api/run", createRunRoutes(io));
 
 registerSocketHandlers(io);
 
-server.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
-});
+connectDB()
+    .then(() => {
+        server.listen(PORT, () => {
+            console.log(`Server listening on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error("Failed to connect to MongoDB:", err);
+        process.exit(1);
+    });

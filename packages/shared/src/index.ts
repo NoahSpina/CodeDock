@@ -7,6 +7,7 @@ export interface Room {
     roomId: string;
     title: string;
     inviteCode: string;
+    status: "active" | "inactive";
     createdAt: string;
     creatorSocketId: string;
     selectedPromptId: string | null;
