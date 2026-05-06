@@ -1,28 +1,36 @@
 import { Router } from "express";
-import { CODING_PROMPTS } from "../data/prompts.js";
-import type { CodingPrompt } from "@codedock/shared";
+import { Prompt } from "../models/Prompt.js";
 
 const router = Router();
 
-router.get("/", (_req, res) => {
-    const summaries = CODING_PROMPTS.map(
-        ({ id, title, difficulty, category }: CodingPrompt) => ({
-            id,
-            title,
-            difficulty,
-            category,
-        })
-    );
-    res.json(summaries);
+router.get("/", async (_req, res) => {
+    try {
+        const prompts = await Prompt.find(
+            {},
+            { id: 1, title: 1, difficulty: 1, category: 1, _id: 0 }
+        ).lean();
+        res.json(prompts);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to get prompts" });
+    }
 });
 
-router.get("/:id", (req, res) => {
-    const prompt = CODING_PROMPTS.find((p: CodingPrompt) => p.id === req.params.id);
-    if (!prompt) {
-        res.status(404).json({ error: "Prompt not found" });
-        return;
+router.get("/:id", async (req, res) => {
+    try {
+        const prompt = await Prompt.findOne(
+            { id: req.params.id },
+            { _id: 0, __v: 0 }
+        ).lean();
+        if (!prompt) {
+            res.status(404).json({ error: "Prompt not found" });
+            return;
+        }
+        res.json(prompt);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to get prompt" });
     }
-    res.json(prompt);
 });
 
 export default router;

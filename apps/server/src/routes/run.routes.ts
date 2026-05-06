@@ -6,6 +6,7 @@ import type {
     ExecutionResult,
     ServerToClientEvents,
 } from "@codedock/shared";
+import { ExecutionHistory } from "../models/ExecutionHistory.js";
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
@@ -38,6 +39,7 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             });
 
             const result = (await runnerResponse.json()) as ExecutionResult;
+            const ranBy = username?.trim() || "Anonymous";
 
             if (roomId) {
                 io.to(roomId).emit("room:execution-result", {
@@ -46,13 +48,26 @@ export function createRunRoutes(io: CodeDockSocketServer) {
                     exitCode: result.exitCode,
                     timedOut: result.timedOut,
                     runtimeMs: result.runtimeMs,
-                    ranBy: username?.trim() || "Anonymous",
+                    ranBy,
                     sentAt: new Date().toISOString(),
                 });
+
+                ExecutionHistory.create({
+                    roomId,
+                    code,
+                    language: "python",
+                    output: result.output,
+                    error: result.error,
+                    exitCode: result.exitCode,
+                    timedOut: result.timedOut,
+                    runtimeMs: result.runtimeMs,
+                    ranBy,
+                }).catch((err) => console.error("Failed to save execution history:", err));
             }
 
             return res.status(runnerResponse.status).json(result);
-        } catch (error) {
+        } catch (err) {
+            console.error(err);
             return res.status(500).json({
                 error: "Failed to connect to runner",
             });
