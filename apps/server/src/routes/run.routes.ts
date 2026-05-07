@@ -2,13 +2,21 @@ import { Router } from "express";
 import type { Server as SocketIOServer } from "socket.io";
 import type {
     ClientToServerEvents,
-    ExecutionRequest,
     ExecutionResult,
     ServerToClientEvents,
     TestCase
 } from "@codedock/shared";
 import { recordExecution } from "../data/historyStore.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
+import { requireAuth, type AuthRequest } from "../middleware/auth.js";
+import { runLimiter } from "../middleware/rateLimits.js";
+import {
+    validateCode,
+    validateGuestId,
+    validateLanguage,
+    validateRoomId,
+    validateStdin,
+} from "../validation.js";
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
@@ -20,47 +28,71 @@ const RUNNER_URL = process.env.RUNNER_URL || "http://localhost:5000";
 export function createRunRoutes(io: CodeDockSocketServer) {
     const router = Router();
 
-    router.post("/python", async (req, res) => {
-        const { code, roomId, username, guestId, userId, input } = req.body;
-
-        if (!code || typeof code !== "string") {
-            return res.status(400).json({
-                error: "Code is required",
-            });
-        }
-
-        try {
-            const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ code, input }),
-            });
-
-            const result = (await runnerResponse.json()) as ExecutionResult;
-
-            if (roomId) {
-                recordExecution(roomId, { guestId, userId, username }, code, input || "", result);
-
-                io.to(roomId).emit("room:execution-result", {
-                    output: result.output,
-                    error: result.error,
-                    exitCode: result.exitCode,
-                    timedOut: result.timedOut,
-                    runtimeMs: result.runtimeMs,
-                    ranBy: username?.trim() || "Anonymous",
-                    sentAt: new Date().toISOString(),
-                });
+    router.post(
+        "/python",
+        requireAuth,
+        runLimiter,
+        async (req: AuthRequest, res) => {
+            let code: string;
+            let input: string;
+            let roomId: string | undefined;
+            let guestId: string | undefined;
+            try {
+                validateLanguage(req.body?.language ?? "python");
+                code = validateCode(req.body?.code);
+                input = validateStdin(req.body?.input);
+                guestId = validateGuestId(req.body?.guestId);
+                if (req.body?.roomId !== undefined && req.body?.roomId !== null) {
+                    roomId = validateRoomId(req.body.roomId);
+                }
+            } catch (err) {
+                return res
+                    .status(400)
+                    .json({ error: typeof err === "string" ? err : "Invalid input" });
             }
 
-            return res.status(runnerResponse.status).json(result);
-        } catch (error) {
-            return res.status(500).json({
-                error: "Failed to connect to runner",
-            });
+            const userId = req.user?.userId;
+            const username = req.user?.username || "Anonymous";
+
+            try {
+                const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ code, input }),
+                });
+
+                const result = (await runnerResponse.json()) as ExecutionResult;
+
+                if (roomId) {
+                    recordExecution(
+                        roomId,
+                        { userId, guestId, username },
+                        code,
+                        input || "",
+                        result,
+                    );
+
+                    io.to(roomId).emit("room:execution-result", {
+                        output: result.output,
+                        error: result.error,
+                        exitCode: result.exitCode,
+                        timedOut: result.timedOut,
+                        runtimeMs: result.runtimeMs,
+                        ranBy: username,
+                        sentAt: new Date().toISOString(),
+                    });
+                }
+
+                return res.status(runnerResponse.status).json(result);
+            } catch (error) {
+                return res.status(500).json({
+                    error: "Failed to connect to runner",
+                });
+            }
         }
-    });
+    );
 
     router.post("/tests", async (req, res) => {
         const { promptId, code } = req.body as {

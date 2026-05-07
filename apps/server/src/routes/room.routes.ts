@@ -9,20 +9,37 @@ import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
-import type { Actor, RoomStatus } from "@codedock/shared";
+import {
+    roomCreateLimiter,
+    roomJoinLimiter,
+    readLimiter,
+} from "../middleware/rateLimits.js";
+import {
+    validateGuestId,
+    validateInviteCode,
+    validatePromptIdOrNull,
+    validateRoomId,
+    validateRoomStatus,
+    validateRoomTitle,
+} from "../validation.js";
 
 const router = Router();
 
-router.post("/", requireAuth, async (req: AuthRequest, res) => {
-    const { title, guestId } = req.body as { title?: string } & Partial<Actor>;
-
-    if (!title || title.trim().length === 0) {
-        return res.status(400).json({ error: "Room title is required" });
+router.post("/", requireAuth, roomCreateLimiter, async (req: AuthRequest, res) => {
+    let title: string;
+    let guestId: string | undefined;
+    try {
+        title = validateRoomTitle(req.body?.title);
+        guestId = validateGuestId(req.body?.guestId);
+    } catch (err) {
+        return res
+            .status(400)
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
     }
 
     try {
         const room = await Room.create({
-            title: title.trim(),
+            title,
             createdBy: req.user!.userId,
         });
 
@@ -62,17 +79,20 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-router.post("/join", requireAuth, async (req: AuthRequest, res) => {
-    const { inviteCode, guestId } = req.body as { inviteCode?: string } & Partial<Actor>;
-
-    if (!inviteCode || inviteCode.trim().length === 0) {
-        return res.status(400).json({ error: "Invite code is required" });
+router.post("/join", requireAuth, roomJoinLimiter, async (req: AuthRequest, res) => {
+    let inviteCode: string;
+    let guestId: string | undefined;
+    try {
+        inviteCode = validateInviteCode(req.body?.inviteCode);
+        guestId = validateGuestId(req.body?.guestId);
+    } catch (err) {
+        return res
+            .status(400)
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
     }
 
     try {
-        const room = await Room.findOne({
-            inviteCode: inviteCode.trim().toUpperCase(),
-        });
+        const room = await Room.findOne({ inviteCode });
 
         if (!room) {
             return res.status(404).json({ error: "Room not found" });
@@ -120,8 +140,15 @@ router.post("/join", requireAuth, async (req: AuthRequest, res) => {
     }
 });
 
-router.get("/:roomId", async (req, res) => {
-    const { roomId } = req.params;
+router.get("/:roomId", readLimiter, async (req, res) => {
+    let roomId: string;
+    try {
+        roomId = validateRoomId(req.params.roomId);
+    } catch (err) {
+        return res
+            .status(400)
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
+    }
 
     try {
         const room = await Room.findOne({ roomId });
@@ -146,8 +173,16 @@ router.get("/:roomId", async (req, res) => {
 });
 
 router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
-    const roomId = req.params.roomId as string;
-    const { promptId } = req.body as { promptId?: string | null };
+    let roomId: string;
+    let promptId: string | null;
+    try {
+        roomId = validateRoomId(req.params.roomId);
+        promptId = validatePromptIdOrNull(req.body?.promptId);
+    } catch (err) {
+        return res
+            .status(400)
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
+    }
 
     try {
         const room = await Room.findOne({ roomId });
@@ -155,16 +190,7 @@ router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
             return res.status(404).json({ error: "Room not found" });
         }
 
-        if (promptId !== null && promptId !== undefined) {
-            const exists = CODING_PROMPTS.some(
-                (p: { id: string }) => p.id === promptId
-            );
-            if (!exists) {
-                return res.status(400).json({ error: "Unknown promptId" });
-            }
-        }
-
-        room.selectedPromptId = promptId ?? null;
+        room.selectedPromptId = promptId;
         await room.save();
 
         const prompt = room.selectedPromptId
@@ -180,11 +206,15 @@ router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.patch("/:roomId/status", requireAuth, async (req: AuthRequest, res) => {
-    const roomId = req.params.roomId as string;
-    const { status } = req.body as { status?: RoomStatus };
-
-    if (status !== "active" && status !== "inactive") {
-        return res.status(400).json({ error: "Status must be active or inactive" });
+    let roomId: string;
+    let status: "active" | "inactive";
+    try {
+        roomId = validateRoomId(req.params.roomId);
+        status = validateRoomStatus(req.body?.status);
+    } catch (err) {
+        return res
+            .status(400)
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
     }
 
     try {

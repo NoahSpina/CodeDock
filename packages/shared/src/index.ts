@@ -96,6 +96,7 @@ export interface ServerToClientEvents {
     "room:execution-result": (payload: ExecutionFinishedMessage) => void;
     "prompt:updated": (payload: { promptId: string | null; prompt: CodingPrompt | null }) => void;
     "room:joined": (payload: { isCreator: boolean }) => void;
+    "room:validation-error": (payload: { event: string; message: string }) => void;
 }
 
 export interface TestCase {
