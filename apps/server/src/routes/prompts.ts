@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { CODING_PROMPTS } from "../data/prompts.js";
-import type { CodingPrompt } from "@codedock/shared";
+import type { CodingPrompt, TestCase } from "@codedock/shared";
 
 const router = Router();
 
@@ -22,7 +22,13 @@ router.get("/:id", (req, res) => {
         res.status(404).json({ error: "Prompt not found" });
         return;
     }
-    res.json(prompt);
+
+    const tcUnhidden = {
+        ...prompt,
+        testCases: prompt.testCases.filter((tc: TestCase) => !tc.hidden),
+    };
+
+    res.json(tcUnhidden);
 });
 
 export default router;

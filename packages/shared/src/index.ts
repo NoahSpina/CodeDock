@@ -98,6 +98,12 @@ export interface ServerToClientEvents {
     "room:joined": (payload: { isCreator: boolean }) => void;
 }
 
+export interface TestCase {
+    args: unknown[];
+    expected: unknown;
+    hidden: boolean;
+}
+
 export interface CodingPrompt {
     id: string;
     title: string;
@@ -107,6 +113,15 @@ export interface CodingPrompt {
     examples: { input: string; output: string; explanation?: string }[];
     constraints: string[];
     starterCode: string;
+    testCases: TestCase[];
+}
+
+export interface TestResult {
+    index: number;
+    passed: boolean;
+    result: unknown;
+    expected: unknown;
+    error: string | null;
 }
 
 export interface InterviewExecution {
