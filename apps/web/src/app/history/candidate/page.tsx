@@ -90,7 +90,7 @@ export default function CandidateHistoryPage() {
                                 <div>
                                     <h2 className="text-xl font-semibold">{session.title}</h2>
                                     <p className="mt-1 text-sm text-slate-400">
-                                        Interviewer {session.interviewer.username} · {session.status}
+                                        Interviewer {session.interviewer.username} - {session.status}
                                     </p>
                                     <p className="mt-3 text-slate-300">
                                         Prompt: {session.selectedPromptTitle || "No prompt selected"}

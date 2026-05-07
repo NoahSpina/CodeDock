@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getOrCreateActor } from "@/lib/identity";
 
@@ -16,10 +16,28 @@ export default function Home() {
     const [error, setError] = useState("");
     const [loadingCreate, setLoadingCreate] = useState(false);
     const [loadingJoin, setLoadingJoin] = useState(false);
+    const [username, setUsername] = useState<string | null>(null);
+
+    useEffect(() => {
+        const token = localStorage.getItem("codedock_token");
+        if (!token) {
+            router.push("/login");
+            return;
+        }
+        setUsername(localStorage.getItem("codedock_username"));
+    }, [router]);
+
+    function handleLogout() {
+        localStorage.removeItem("codedock_token");
+        localStorage.removeItem("codedock_username");
+        router.push("/login");
+    }
 
     async function handleCreateRoom() {
         setError("");
         setLoadingCreate(true);
+
+        const token = localStorage.getItem("codedock_token") ?? "";
 
         try {
             const actor = getOrCreateActor();
@@ -27,6 +45,7 @@ export default function Home() {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({ title, ...actor }),
             });
@@ -49,12 +68,15 @@ export default function Home() {
         setError("");
         setLoadingJoin(true);
 
+        const token = localStorage.getItem("codedock_token") ?? "";
+
         try {
             const actor = getOrCreateActor();
             const res = await fetch(`${SERVER_URL}/api/rooms/join`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({ inviteCode, ...actor }),
             });
@@ -73,6 +95,10 @@ export default function Home() {
         }
     }
 
+    if (!username) {
+        return null;
+    }
+
     return (
         <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-6">
             <div className="w-full max-w-3xl grid gap-6 md:grid-cols-2">
@@ -84,6 +110,20 @@ export default function Home() {
                     <p className="mt-2 text-sm text-slate-400">
                         Create a private room, collaborate live, and run Python code.
                     </p>
+                    <div className="mt-6 flex items-center justify-between">
+                        <p className="text-sm text-slate-400">
+                            Signed in as{" "}
+                            <span className="font-semibold text-slate-200">
+                                {username}
+                            </span>
+                        </p>
+                        <button
+                            onClick={handleLogout}
+                            className="text-sm text-slate-500 hover:text-slate-300 cursor-pointer"
+                        >
+                            Sign out
+                        </button>
+                    </div>
                 </section>
 
                 <section className="rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-lg">

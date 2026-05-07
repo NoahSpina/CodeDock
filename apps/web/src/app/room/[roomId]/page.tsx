@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import Editor from "@monaco-editor/react";
 import type {
     ChatMessage,
@@ -26,6 +27,8 @@ const SERVER_URL =
     process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
 
 export default function RoomPage({ params }: RoomPageProps) {
+    const router = useRouter();
+
     const [roomId, setRoomId] = useState("");
     const [room, setRoom] = useState<Room | null>(null);
     const [participants, setParticipants] = useState<Participant[]>([]);
@@ -43,14 +46,27 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [activePrompt, setActivePrompt] = useState<CodingPrompt | null>(null);
 
     useEffect(() => {
+        const token = localStorage.getItem("codedock_token");
+        if (!token) {
+            router.push("/login");
+        }
+    }, [router]);
+
+    useEffect(() => {
         async function resolveParamsAndFetchRoom() {
             try {
                 const resolved = await params;
                 setRoomId(resolved.roomId);
 
-                const res = await fetch(`${SERVER_URL}/api/rooms/${resolved.roomId}`, {
-                    cache: "no-store",
-                });
+                const token = localStorage.getItem("codedock_token") ?? "";
+
+                const res = await fetch(
+                    `${SERVER_URL}/api/rooms/${resolved.roomId}`,
+                    {
+                        cache: "no-store",
+                        headers: { Authorization: `Bearer ${token}` },
+                    }
+                );
 
                 if (!res.ok) {
                     throw new Error("Room not found");
@@ -67,7 +83,9 @@ export default function RoomPage({ params }: RoomPageProps) {
                         .catch(() => { });
                 }
             } catch (err) {
-                setError(err instanceof Error ? err.message : "Something went wrong");
+                setError(
+                    err instanceof Error ? err.message : "Something went wrong"
+                );
             }
         }
 
@@ -98,7 +116,7 @@ export default function RoomPage({ params }: RoomPageProps) {
         }
 
         function handleChatMessage(message: ChatMessage) {
-            setMessages((currentMessages) => [...currentMessages, message]);
+            setMessages((prev) => [...prev, message]);
         }
 
         function handleCodeChange(payload: CodeChangeMessage) {
@@ -115,8 +133,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 : `Process exited with code ${result.exitCode}${result.runtimeMs !== undefined ? ` in ${result.runtimeMs}ms` : ""}`;
 
             setOutput(
-                `${result.ranBy} ran the code. Output:\n\n${finalOutput ? `${finalOutput}\n${exitInfo}` : exitInfo
-                }`,
+                `${result.ranBy} ran the code. Output:\n\n${finalOutput ? `${finalOutput}\n${exitInfo}` : exitInfo}`
             );
         }
 
@@ -124,7 +141,13 @@ export default function RoomPage({ params }: RoomPageProps) {
             setIsCreator(isCreator);
         }
 
-        function handlePromptUpdated({ promptId, prompt }: { promptId: string | null; prompt: CodingPrompt | null }) {
+        function handlePromptUpdated({
+            promptId,
+            prompt,
+        }: {
+            promptId: string | null;
+            prompt: CodingPrompt | null;
+        }) {
             setActivePromptId(promptId);
             setActivePrompt(prompt);
         }
@@ -155,11 +178,14 @@ export default function RoomPage({ params }: RoomPageProps) {
         setIsRunning(true);
         setOutput("Running...");
 
+        const token = localStorage.getItem("codedock_token") ?? "";
+
         try {
             const res = await fetch(`${SERVER_URL}/api/run/python`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
                 },
                 body: JSON.stringify({
                     language: "python",
@@ -187,9 +213,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     function handleSendMessage(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
 
-        if (!chatInput.trim() || !roomId) {
-            return;
-        }
+        if (!chatInput.trim() || !roomId) return;
 
         socket.emit("room:chat-message", {
             roomId,
@@ -281,7 +305,9 @@ export default function RoomPage({ params }: RoomPageProps) {
                         </div>
 
                         <div className="mt-6">
-                            <h3 className="text-lg font-medium text-slate-200">Standard Input</h3>
+                            <h3 className="text-lg font-medium text-slate-200">
+                                Standard Input
+                            </h3>
                             <textarea
                                 value={stdin}
                                 onChange={(e) => setStdin(e.target.value)}
@@ -305,7 +331,9 @@ export default function RoomPage({ params }: RoomPageProps) {
 
                             <div className="mt-4 rounded-xl border border-slate-700 bg-slate-950 p-3 min-h-[180px] max-h-[260px] overflow-y-auto space-y-3">
                                 {messages.length === 0 ? (
-                                    <p className="text-slate-400">No messages yet.</p>
+                                    <p className="text-slate-400">
+                                        No messages yet.
+                                    </p>
                                 ) : (
                                     messages.map((message, index) => (
                                         <div
@@ -315,16 +343,23 @@ export default function RoomPage({ params }: RoomPageProps) {
                                             <p className="text-sm font-semibold text-slate-200">
                                                 {message.username}
                                             </p>
-                                            <p className="mt-1 text-slate-300">{message.message}</p>
+                                            <p className="mt-1 text-slate-300">
+                                                {message.message}
+                                            </p>
                                         </div>
                                     ))
                                 )}
                             </div>
 
-                            <form onSubmit={handleSendMessage} className="mt-4 flex gap-2">
+                            <form
+                                onSubmit={handleSendMessage}
+                                className="mt-4 flex gap-2"
+                            >
                                 <input
                                     value={chatInput}
-                                    onChange={(event) => setChatInput(event.target.value)}
+                                    onChange={(event) =>
+                                        setChatInput(event.target.value)
+                                    }
                                     placeholder="Type a message..."
                                     className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
                                 />
@@ -338,12 +373,15 @@ export default function RoomPage({ params }: RoomPageProps) {
                             </form>
                         </div>
 
-
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                            <h2 className="text-xl font-semibold">Participants</h2>
+                            <h2 className="text-xl font-semibold">
+                                Participants
+                            </h2>
                             <div className="mt-4 space-y-2">
                                 {participants.length === 0 ? (
-                                    <p className="text-slate-400">No participants yet.</p>
+                                    <p className="text-slate-400">
+                                        No participants yet.
+                                    </p>
                                 ) : (
                                     participants.map((participant) => (
                                         <div

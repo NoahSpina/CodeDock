@@ -64,7 +64,7 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                         <h1 className="text-3xl font-bold">{session?.title || "Session Detail"}</h1>
                         {session ? (
                             <p className="mt-2 text-slate-300">
-                                Room {session.roomId} · Invite {session.inviteCode} · {session.status}
+                                Room {session.roomId} - Invite {session.inviteCode} - {session.status}
                             </p>
                         ) : null}
                     </div>
@@ -111,7 +111,7 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                     <div className="mt-4 text-slate-300">
                                         <p className="font-medium text-white">{session.selectedPrompt.title}</p>
                                         <p className="mt-1 text-sm text-slate-400">
-                                            {session.selectedPrompt.difficulty} · {session.selectedPrompt.category}
+                                            {session.selectedPrompt.difficulty} - {session.selectedPrompt.category}
                                         </p>
                                         <p className="mt-3 whitespace-pre-wrap">{session.selectedPrompt.description}</p>
                                     </div>
@@ -154,7 +154,7 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                                 <p className="mt-2 text-sm text-slate-300">
                                                     Exit code {execution.exitCode}
                                                     {execution.runtimeMs !== undefined ? ` in ${execution.runtimeMs}ms` : ""}
-                                                    {execution.timedOut ? " · timed out" : ""}
+                                                    {execution.timedOut ? " - timed out" : ""}
                                                 </p>
                                                 <pre className="mt-3 whitespace-pre-wrap rounded border border-slate-800 bg-slate-900 p-3 font-mono text-sm text-slate-300">
                                                     {[execution.output, execution.error].filter(Boolean).join("\n") || "No output."}

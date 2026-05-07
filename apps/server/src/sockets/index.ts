@@ -1,4 +1,5 @@
 import type { Server as SocketIOServer, Socket } from "socket.io";
+import jwt from "jsonwebtoken";
 import type {
     ChatMessagePayload,
     ClientToServerEvents,
@@ -12,75 +13,117 @@ import {
     getParticipants,
 } from "./presenceStore.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
-import { setRoomPrompt, getRoomById, setCreatorSocketId } from "../data/roomStore.js";
 import {
     recordCodeChanged,
     recordParticipantJoined,
     recordPromptSelected,
 } from "../data/historyStore.js";
+import { Room } from "../models/Room.js";
+
+interface SocketData {
+    userId: string;
+    username: string;
+}
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
-    ServerToClientEvents
+    ServerToClientEvents,
+    {},
+    SocketData
 >;
 
-type CodeDockSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+type CodeDockSocket = Socket<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    {},
+    SocketData
+>;
 
 export function registerSocketHandlers(io: CodeDockSocketServer) {
+    io.use((socket, next) => {
+        const token = socket.handshake.auth.token as string | undefined;
+        if (!token) {
+            return next(new Error("Authentication required"));
+        }
+        try {
+            const secret = process.env.JWT_SECRET || "change-me";
+            const payload = jwt.verify(token, secret) as {
+                userId: string;
+                username: string;
+            };
+            socket.data.userId = payload.userId;
+            socket.data.username = payload.username;
+            next();
+        } catch {
+            next(new Error("Invalid token"));
+        }
+    });
+
     io.on("connection", (socket: CodeDockSocket) => {
-        console.log(`Socket connected: ${socket.id}`);
+        console.log(`Socket connected: ${socket.id} (${socket.data.username})`);
 
-        socket.on("room:join", ({ roomId, username, guestId }: JoinRoomPayload) => {
-            const room = getRoomById(roomId);
-            if (!room || room.status === "inactive") {
-                return;
+        socket.on("room:join", async ({ roomId, guestId }: JoinRoomPayload) => {
+            const username = socket.data.username || "Anonymous";
+
+            try {
+                const room = await Room.findOne({ roomId });
+                if (!room || room.status === "inactive") return;
+
+                socket.join(roomId);
+                addParticipant(roomId, { socketId: socket.id, username, guestId });
+                io.to(roomId).emit("room:participants", getParticipants(roomId));
+
+                const isCreator = room.createdBy.toString() === socket.data.userId;
+
+                if (isCreator && room.creatorSocketId !== socket.id) {
+                    room.creatorSocketId = socket.id;
+                    await room.save();
+                }
+
+                recordParticipantJoined(
+                    {
+                        roomId: room.roomId,
+                        title: room.title,
+                        inviteCode: room.inviteCode,
+                        status: room.status,
+                        createdAt: room.createdAt.toISOString(),
+                        creatorSocketId: room.creatorSocketId,
+                        selectedPromptId: room.selectedPromptId,
+                    },
+                    {
+                        userId: socket.data.userId,
+                        guestId,
+                        username,
+                    },
+                );
+
+                if (room.selectedPromptId) {
+                    const prompt =
+                        CODING_PROMPTS.find(
+                            (p: { id: string }) => p.id === room.selectedPromptId,
+                        ) ?? null;
+                    socket.emit("prompt:updated", {
+                        promptId: room.selectedPromptId,
+                        prompt,
+                    });
+                }
+
+                socket.emit("room:joined", { isCreator });
+            } catch (err) {
+                console.error("room:join error", err);
             }
-
-            socket.join(roomId);
-
-            addParticipant(roomId, {
-                socketId: socket.id,
-                username: username?.trim() || "Anonymous",
-                guestId,
-            });
-
-            io.to(roomId).emit("room:participants", getParticipants(roomId));
-
-            if (room.creatorGuestId && room.creatorGuestId === guestId) {
-                setCreatorSocketId(roomId, socket.id);
-            } else if (!room.creatorSocketId && !room.creatorGuestId) {
-                setCreatorSocketId(roomId, socket.id);
-            }
-
-            const isCreator = getRoomById(roomId)?.creatorSocketId === socket.id;
-            recordParticipantJoined(room, { guestId, username });
-
-            if (room?.selectedPromptId) {
-                const prompt = CODING_PROMPTS.find(
-                    (p: { id: string }) => p.id === room.selectedPromptId
-                ) ?? null;
-                socket.emit("prompt:updated", {
-                    promptId: room.selectedPromptId,
-                    prompt,
-                });
-            }
-
-            socket.emit("room:joined", { isCreator });
-
         });
 
         socket.on(
             "room:chat-message",
-            ({ roomId, username, message }: ChatMessagePayload) => {
+            ({ roomId, message }: ChatMessagePayload) => {
                 const trimmedMessage = message?.trim();
 
-                if (!roomId || !trimmedMessage) {
-                    return;
-                }
+                if (!roomId || !trimmedMessage) return;
 
                 io.to(roomId).emit("room:chat-message", {
                     socketId: socket.id,
-                    username: username?.trim() || "Anonymous",
+                    username: socket.data.username || "Anonymous",
                     message: trimmedMessage,
                     sentAt: new Date().toISOString(),
                 });
@@ -88,44 +131,58 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
         );
 
         socket.on("room:code-change", ({ roomId, code }: CodeChangePayload) => {
-            if (!roomId) {
-                return;
-            }
+            if (!roomId) return;
 
             recordCodeChanged(roomId, code);
-
-            socket.to(roomId).emit("room:code-change", {
-                code,
-            });
+            socket.to(roomId).emit("room:code-change", { code });
         });
 
-        socket.on("prompt:select", ({ roomId, promptId }: { roomId: string; promptId: string }) => {
-            const room = getRoomById(roomId);
-            if (room?.creatorSocketId !== socket.id) return;
+        socket.on(
+            "prompt:select",
+            async ({ roomId, promptId }: { roomId: string; promptId: string }) => {
+                try {
+                    const room = await Room.findOne({ roomId });
+                    if (!room) return;
+                    if (room.createdBy.toString() !== socket.data.userId) return;
 
-            const prompt = CODING_PROMPTS.find(
-                (p: { id: string }) => p.id === promptId
-            ) ?? null;
-            if (!prompt) return;
+                    const prompt =
+                        CODING_PROMPTS.find((p: { id: string }) => p.id === promptId) ??
+                        null;
+                    if (!prompt) return;
 
-            setRoomPrompt(roomId, promptId);
-            recordPromptSelected(roomId, promptId, prompt);
-            io.to(roomId).emit("prompt:updated", { promptId, prompt });
-        });
+                    room.selectedPromptId = promptId;
+                    await room.save();
 
-        socket.on("prompt:clear", ({ roomId }: { roomId: string }) => {
-            const room = getRoomById(roomId);
-            if (room?.creatorSocketId !== socket.id) return;
-            setRoomPrompt(roomId, null);
-            recordPromptSelected(roomId, null, null);
-            io.to(roomId).emit("prompt:updated", { promptId: null, prompt: null });
+                    recordPromptSelected(roomId, promptId, prompt);
+                    io.to(roomId).emit("prompt:updated", { promptId, prompt });
+                } catch (err) {
+                    console.error("prompt:select error", err);
+                }
+            },
+        );
+
+        socket.on("prompt:clear", async ({ roomId }: { roomId: string }) => {
+            try {
+                const room = await Room.findOne({ roomId });
+                if (!room) return;
+                if (room.createdBy.toString() !== socket.data.userId) return;
+
+                room.selectedPromptId = null;
+                await room.save();
+
+                recordPromptSelected(roomId, null, null);
+                io.to(roomId).emit("prompt:updated", {
+                    promptId: null,
+                    prompt: null,
+                });
+            } catch (err) {
+                console.error("prompt:clear error", err);
+            }
         });
 
         socket.on("disconnect", () => {
             console.log(`Socket disconnected: ${socket.id}`);
-
             const roomId = removeParticipant(socket.id);
-
             if (roomId) {
                 io.to(roomId).emit("room:participants", getParticipants(roomId));
             }

@@ -90,7 +90,7 @@ export default function InterviewerHistoryPage() {
                                 <div>
                                     <h2 className="text-xl font-semibold">{session.title}</h2>
                                     <p className="mt-1 text-sm text-slate-400">
-                                        Invite {session.inviteCode} · {session.status}
+                                        Invite {session.inviteCode} - {session.status}
                                     </p>
                                     <p className="mt-3 text-slate-300">
                                         Candidates: {session.candidates.map((candidate) => candidate.username).join(", ") || "None yet"}

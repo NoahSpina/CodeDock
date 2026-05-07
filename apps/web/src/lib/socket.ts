@@ -13,9 +13,15 @@ export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
     SERVER_URL,
     {
         autoConnect: false,
+        auth: (cb) => {
+            const token =
+                typeof window !== "undefined"
+                    ? localStorage.getItem("codedock_token") ?? ""
+                    : "";
+            cb({ token });
+        },
     },
 );
-
 
 export function emitSelectPrompt(roomId: string, promptId: string) {
     socket.emit("prompt:select", { roomId, promptId });
