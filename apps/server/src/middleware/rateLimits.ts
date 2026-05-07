@@ -1,18 +1,19 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 import type { AuthRequest } from "./auth.js";
 
 const userIdKey = (req: Request): string => {
     const authReq = req as AuthRequest;
-    return authReq.user?.userId ?? req.ip ?? "unknown";
+    if (authReq.user?.userId) return authReq.user.userId;
+    return ipKeyGenerator(req.ip ?? "");
 };
 
 export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 2 * 60 * 1000,
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many authentication attempts. Try again later." },
+    message: { error: "Too many authentication attempts. Try again in 2 minutes." },
 });
 
 export const roomCreateLimiter = rateLimit({
