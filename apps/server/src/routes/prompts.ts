@@ -1,46 +1,37 @@
 import { Router } from "express";
-import { CODING_PROMPTS } from "../data/prompts.js";
-import type { CodingPrompt, TestCase } from "@codedock/shared";
+import { Prompt } from "../models/Prompt.js";
 import { readLimiter } from "../middleware/rateLimits.js";
-import { validatePromptId } from "../validation.js";
 
 const router = Router();
 
-router.get("/", readLimiter, (_req, res) => {
-    const summaries = CODING_PROMPTS.map(
-        ({ id, title, difficulty, category }: CodingPrompt) => ({
-            id,
-            title,
-            difficulty,
-            category,
-        })
-    );
-    res.json(summaries);
+router.get("/", readLimiter, async (_req, res) => {
+    try {
+        const prompts = await Prompt.find(
+            {},
+            { id: 1, title: 1, difficulty: 1, category: 1, _id: 0 }
+        ).lean();
+        res.json(prompts);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to get prompts" });
+    }
 });
 
-router.get("/:id", readLimiter, (req, res) => {
-    let id: string;
+router.get("/:id", readLimiter, async (req, res) => {
     try {
-        id = validatePromptId(req.params.id);
+        const prompt = await Prompt.findOne(
+            { id: req.params.id },
+            { _id: 0, __v: 0 }
+        ).lean();
+        if (!prompt) {
+            res.status(404).json({ error: "Prompt not found" });
+            return;
+        }
+        res.json(prompt);
     } catch (err) {
-        res.status(400).json({
-            error: typeof err === "string" ? err : "Invalid input",
-        });
-        return;
+        console.error(err);
+        res.status(500).json({ error: "Failed to get prompt" });
     }
-
-    const prompt = CODING_PROMPTS.find((p: CodingPrompt) => p.id === id);
-    if (!prompt) {
-        res.status(404).json({ error: "Prompt not found" });
-        return;
-    }
-
-    const tcUnhidden = {
-        ...prompt,
-        testCases: prompt.testCases.filter((tc: TestCase) => !tc.hidden),
-    };
-
-    res.json(tcUnhidden);
 });
 
 export default router;

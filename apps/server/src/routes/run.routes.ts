@@ -120,6 +120,7 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             });
 
             const result = (await runnerResponse.json()) as ExecutionResult;
+            const ranBy = username?.trim() || "Anonymous";
 
             if (result.timedOut) {
                 return res.json({ error: "Code timed out", results: [] });
@@ -134,6 +135,8 @@ export function createRunRoutes(io: CodeDockSocketServer) {
 
     return router;
 }
+<<<<<<< HEAD
+=======
 
 function buildHarness(code: string, promptId: string, testCases: TestCase[]): string {
     const fnName = promptId.replace(/-/g, "_");
@@ -194,3 +197,4 @@ function parseHarnessOutput(
         }));
     }
 }
+>>>>>>> main
