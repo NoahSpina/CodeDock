@@ -15,6 +15,8 @@ export interface IRoom extends Document {
     createdBy: mongoose.Types.ObjectId;
     creatorSocketId: string;
     selectedPromptId: string | null;
+    currentCode: string;
+    currentStdin: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -52,6 +54,8 @@ const roomSchema = new mongoose.Schema<IRoom>(
             required: true,
         },
         creatorSocketId: { type: String, default: "" },
+        currentCode: { type: String, default: "" },
+        currentStdin: { type: String, default: "" },
         selectedPromptId: {
             type: String,
             default: null,

@@ -127,6 +127,10 @@ export default function RoomPage({ params }: RoomPageProps) {
             setCode(payload.code);
         }
 
+        function handleStdinChange({ stdin }: { stdin: string }) {
+            setStdin(stdin);
+        }
+
         function handleExecutionResult(result: ExecutionFinishedMessage) {
             const finalOutput = [result.output, result.error]
                 .filter(Boolean)
@@ -141,8 +145,10 @@ export default function RoomPage({ params }: RoomPageProps) {
             );
         }
 
-        function handleRoomJoined({ isCreator }: { isCreator: boolean }) {
+        function handleRoomJoined({ isCreator, code, stdin }: { isCreator: boolean; code: string; stdin: string }) {
             setIsCreator(isCreator);
+            if (code) setCode(code);
+            if (stdin) setStdin(stdin);
         }
 
         function handlePromptUpdated({
@@ -169,6 +175,7 @@ export default function RoomPage({ params }: RoomPageProps) {
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
+        socket.on("room:stdin-change", handleStdinChange);
         socket.on("room:execution-result", handleExecutionResult);
         socket.on("room:joined", handleRoomJoined);
         socket.on("room:validation-error", handleValidationError);
@@ -178,6 +185,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             socket.off("room:participants", handleParticipants);
             socket.off("room:chat-message", handleChatMessage);
             socket.off("room:code-change", handleCodeChange);
+            socket.off("room:stdin-change", handleStdinChange);
             socket.off("room:execution-result", handleExecutionResult);
             socket.off("room:joined", handleRoomJoined);
             socket.off("room:validation-error", handleValidationError);
@@ -364,7 +372,10 @@ export default function RoomPage({ params }: RoomPageProps) {
                             </h3>
                             <textarea
                                 value={stdin}
-                                onChange={(e) => setStdin(e.target.value)}
+                                onChange={(e) => {
+                                    setStdin(e.target.value);
+                                    socket.emit("room:stdin-change", { roomId, stdin: e.target.value, guestId });
+                                }}
                                 placeholder="Enter input here (optional)..."
                                 spellCheck={false}
                                 className="mt-2 h-[100px] w-full resize-none rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
