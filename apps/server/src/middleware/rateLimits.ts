@@ -17,12 +17,12 @@ export const authLimiter = rateLimit({
 });
 
 export const roomCreateLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000,
+    windowMs: 15 * 60 * 1000,
     max: 10,
     keyGenerator: userIdKey,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many rooms created. Try again later." },
+    message: { error: "Too many rooms created. Try again in 15 minutes." },
 });
 
 export const roomJoinLimiter = rateLimit({
@@ -30,7 +30,7 @@ export const roomJoinLimiter = rateLimit({
     max: 20,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many join attempts. Try again later." },
+    message: { error: "Too many join attempts. Try again in 15 minutes." },
 });
 
 export const runLimiter = rateLimit({
@@ -39,7 +39,7 @@ export const runLimiter = rateLimit({
     keyGenerator: userIdKey,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many code executions. Try again later." },
+    message: { error: "Too many code executions. Try again in 1 minute." },
 });
 
 export const readLimiter = rateLimit({
@@ -47,7 +47,7 @@ export const readLimiter = rateLimit({
     max: 120,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many requests. Try again later." },
+    message: { error: "Too many requests. Try again in 1 minute." },
 });
 
 export const globalLimiter = rateLimit({
@@ -55,5 +55,5 @@ export const globalLimiter = rateLimit({
     max: 300,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { error: "Too many requests. Try again later." },
+    message: { error: "Too many requests. Try again in 1 minute." },
 });
