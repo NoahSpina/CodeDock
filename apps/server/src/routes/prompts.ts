@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { Prompt } from "../models/Prompt.js";
+import { readLimiter } from "../middleware/rateLimits.js";
 
 const router = Router();
 
-router.get("/", async (_req, res) => {
+router.get("/", readLimiter, async (_req, res) => {
     try {
         const prompts = await Prompt.find(
             {},
@@ -16,7 +17,7 @@ router.get("/", async (_req, res) => {
     }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", readLimiter, async (req, res) => {
     try {
         const prompt = await Prompt.findOne(
             { id: req.params.id },

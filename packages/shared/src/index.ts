@@ -1,16 +1,27 @@
 export interface Participant {
     socketId: string;
     username: string;
+    guestId?: string;
+}
+
+export type RoomStatus = "active" | "inactive";
+
+export interface Actor {
+    userId?: string;
+    guestId?: string;
+    username: string;
 }
 
 export interface Room {
     roomId: string;
     title: string;
     inviteCode: string;
-    status: "active" | "inactive";
     createdAt: string;
     creatorSocketId: string;
+    creatorGuestId?: string;
+    creatorUsername?: string;
     selectedPromptId: string | null;
+    status: RoomStatus;
 }
 
 export interface ChatMessage {
@@ -23,6 +34,7 @@ export interface ChatMessage {
 export interface JoinRoomPayload {
     roomId: string;
     username: string;
+    guestId?: string;
 }
 
 export interface ChatMessagePayload {
@@ -34,6 +46,7 @@ export interface ChatMessagePayload {
 export interface CodeChangePayload {
     roomId: string;
     code: string;
+    guestId?: string;
 }
 
 export interface CodeChangeMessage {
@@ -45,6 +58,9 @@ export interface ExecutionRequest {
     code: string;
     roomId?: string;
     input?: string;
+    userId?: string;
+    username?: string;
+    guestId?: string;
 }
 
 export interface ExecutionResult {
@@ -80,6 +96,13 @@ export interface ServerToClientEvents {
     "room:execution-result": (payload: ExecutionFinishedMessage) => void;
     "prompt:updated": (payload: { promptId: string | null; prompt: CodingPrompt | null }) => void;
     "room:joined": (payload: { isCreator: boolean }) => void;
+    "room:validation-error": (payload: { event: string; message: string }) => void;
+}
+
+export interface TestCase {
+    args: unknown[];
+    expected: unknown;
+    hidden: boolean;
 }
 
 export interface CodingPrompt {
@@ -91,4 +114,57 @@ export interface CodingPrompt {
     examples: { input: string; output: string; explanation?: string }[];
     constraints: string[];
     starterCode: string;
+    testCases: TestCase[];
+}
+
+export interface TestResult {
+    index: number;
+    passed: boolean;
+    result: unknown;
+    expected: unknown;
+    error: string | null;
+}
+
+export interface InterviewExecution {
+    ranBy: Actor;
+    code: string;
+    stdin: string;
+    output: string;
+    error: string;
+    exitCode: number | null;
+    timedOut?: boolean;
+    runtimeMs?: number;
+    createdAt: string;
+}
+
+export interface InterviewSession {
+    roomId: string;
+    title: string;
+    inviteCode: string;
+    status: RoomStatus;
+    interviewer: Actor;
+    candidates: Actor[];
+    selectedPromptId: string | null;
+    selectedPrompt?: CodingPrompt | null;
+    finalCode: string;
+    stdin: string;
+    executions: InterviewExecution[];
+    createdAt: string;
+    updatedAt: string;
+    closedAt?: string;
+}
+
+export interface InterviewHistorySummary {
+    roomId: string;
+    title: string;
+    inviteCode: string;
+    status: RoomStatus;
+    interviewer: Actor;
+    candidates: Actor[];
+    selectedPromptId: string | null;
+    selectedPromptTitle?: string;
+    lastExecution?: InterviewExecution;
+    createdAt: string;
+    updatedAt: string;
+    closedAt?: string;
 }

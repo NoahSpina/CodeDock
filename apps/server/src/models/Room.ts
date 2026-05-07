@@ -1,4 +1,11 @@
 import mongoose, { type Document } from "mongoose";
+import {
+    asMongooseValidator,
+    validateInviteCode,
+    validatePromptIdOrNull,
+    validateRoomId,
+    validateRoomTitle,
+} from "../validation.js";
 
 export interface IRoom extends Document {
     roomId: string;
@@ -19,13 +26,20 @@ const roomSchema = new mongoose.Schema<IRoom>(
             required: true,
             unique: true,
             default: () => Math.random().toString(36).slice(2, 10),
+            validate: asMongooseValidator(validateRoomId),
         },
-        title: { type: String, required: true, trim: true },
+        title: {
+            type: String,
+            required: true,
+            trim: true,
+            validate: asMongooseValidator(validateRoomTitle),
+        },
         inviteCode: {
             type: String,
             required: true,
             unique: true,
             default: () => Math.random().toString(36).slice(2, 8).toUpperCase(),
+            validate: asMongooseValidator(validateInviteCode),
         },
         status: {
             type: String,
@@ -38,7 +52,11 @@ const roomSchema = new mongoose.Schema<IRoom>(
             required: true,
         },
         creatorSocketId: { type: String, default: "" },
-        selectedPromptId: { type: String, default: null },
+        selectedPromptId: {
+            type: String,
+            default: null,
+            validate: asMongooseValidator(validatePromptIdOrNull),
+        },
     },
     { timestamps: true }
 );
