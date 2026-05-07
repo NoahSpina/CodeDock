@@ -19,6 +19,13 @@ import {
     recordPromptSelected,
 } from "../data/historyStore.js";
 import { Room } from "../models/Room.js";
+import {
+    validateChatMessage,
+    validateCode,
+    validateGuestId,
+    validatePromptId,
+    validateRoomId,
+} from "../validation.js";
 
 interface SocketData {
     userId: string;
@@ -38,6 +45,17 @@ type CodeDockSocket = Socket<
     {},
     SocketData
 >;
+
+function emitValidationError(
+    socket: CodeDockSocket,
+    event: string,
+    err: unknown
+) {
+    socket.emit("room:validation-error", {
+        event,
+        message: typeof err === "string" ? err : "Invalid input",
+    });
+}
 
 export function registerSocketHandlers(io: CodeDockSocketServer) {
     io.use((socket, next) => {
@@ -63,15 +81,31 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
         console.log(`Socket connected: ${socket.id} (${socket.data.username})`);
 
         socket.on("room:join", async ({ roomId, guestId }: JoinRoomPayload) => {
+            let cleanRoomId: string;
+            let cleanGuestId: string | undefined;
+            try {
+                cleanRoomId = validateRoomId(roomId);
+                cleanGuestId = validateGuestId(guestId);
+            } catch (err) {
+                return emitValidationError(socket, "room:join", err);
+            }
+
             const username = socket.data.username || "Anonymous";
 
             try {
-                const room = await Room.findOne({ roomId });
+                const room = await Room.findOne({ roomId: cleanRoomId });
                 if (!room || room.status === "inactive") return;
 
-                socket.join(roomId);
-                addParticipant(roomId, { socketId: socket.id, username, guestId });
-                io.to(roomId).emit("room:participants", getParticipants(roomId));
+                socket.join(cleanRoomId);
+                addParticipant(cleanRoomId, {
+                    socketId: socket.id,
+                    username,
+                    guestId: cleanGuestId,
+                });
+                io.to(cleanRoomId).emit(
+                    "room:participants",
+                    getParticipants(cleanRoomId)
+                );
 
                 const isCreator = room.createdBy.toString() === socket.data.userId;
 
@@ -92,7 +126,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                     },
                     {
                         userId: socket.data.userId,
-                        guestId,
+                        guestId: cleanGuestId,
                         username,
                     },
                 );
@@ -117,44 +151,79 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
         socket.on(
             "room:chat-message",
             ({ roomId, message }: ChatMessagePayload) => {
-                const trimmedMessage = message?.trim();
+                let cleanRoomId: string;
+                let cleanMessage: string;
+                try {
+                    cleanRoomId = validateRoomId(roomId);
+                    cleanMessage = validateChatMessage(message);
+                } catch (err) {
+                    return emitValidationError(
+                        socket,
+                        "room:chat-message",
+                        err
+                    );
+                }
 
-                if (!roomId || !trimmedMessage) return;
-
-                io.to(roomId).emit("room:chat-message", {
+                io.to(cleanRoomId).emit("room:chat-message", {
                     socketId: socket.id,
                     username: socket.data.username || "Anonymous",
-                    message: trimmedMessage,
+                    message: cleanMessage,
                     sentAt: new Date().toISOString(),
                 });
             },
         );
 
         socket.on("room:code-change", ({ roomId, code }: CodeChangePayload) => {
-            if (!roomId) return;
+            let cleanRoomId: string;
+            let cleanCode: string;
+            try {
+                cleanRoomId = validateRoomId(roomId);
+                cleanCode = validateCode(code);
+            } catch (err) {
+                return emitValidationError(socket, "room:code-change", err);
+            }
 
-            recordCodeChanged(roomId, code);
-            socket.to(roomId).emit("room:code-change", { code });
+            recordCodeChanged(cleanRoomId, cleanCode);
+            socket.to(cleanRoomId).emit("room:code-change", { code: cleanCode });
         });
 
         socket.on(
             "prompt:select",
-            async ({ roomId, promptId }: { roomId: string; promptId: string }) => {
+            async ({
+                roomId,
+                promptId,
+            }: {
+                roomId: string;
+                promptId: string;
+            }) => {
+                let cleanRoomId: string;
+                let cleanPromptId: string;
                 try {
-                    const room = await Room.findOne({ roomId });
+                    cleanRoomId = validateRoomId(roomId);
+                    cleanPromptId = validatePromptId(promptId);
+                } catch (err) {
+                    return emitValidationError(socket, "prompt:select", err);
+                }
+
+                try {
+                    const room = await Room.findOne({ roomId: cleanRoomId });
                     if (!room) return;
                     if (room.createdBy.toString() !== socket.data.userId) return;
 
                     const prompt =
-                        CODING_PROMPTS.find((p: { id: string }) => p.id === promptId) ??
-                        null;
+                        CODING_PROMPTS.find(
+                            (p: { id: string }) => p.id === cleanPromptId
+                        ) ?? null;
                     if (!prompt) return;
 
-                    room.selectedPromptId = promptId;
+                    room.selectedPromptId = cleanPromptId;
                     await room.save();
 
-                    recordPromptSelected(roomId, promptId, prompt);
-                    io.to(roomId).emit("prompt:updated", { promptId, prompt });
+                    recordPromptSelected(cleanRoomId, cleanPromptId, prompt);
+                    io.to(cleanRoomId).emit("prompt:updated", {
+                        promptId: cleanPromptId,
+                        prompt,
+                    });
                 } catch (err) {
                     console.error("prompt:select error", err);
                 }
@@ -162,16 +231,23 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
         );
 
         socket.on("prompt:clear", async ({ roomId }: { roomId: string }) => {
+            let cleanRoomId: string;
             try {
-                const room = await Room.findOne({ roomId });
+                cleanRoomId = validateRoomId(roomId);
+            } catch (err) {
+                return emitValidationError(socket, "prompt:clear", err);
+            }
+
+            try {
+                const room = await Room.findOne({ roomId: cleanRoomId });
                 if (!room) return;
                 if (room.createdBy.toString() !== socket.data.userId) return;
 
                 room.selectedPromptId = null;
                 await room.save();
 
-                recordPromptSelected(roomId, null, null);
-                io.to(roomId).emit("prompt:updated", {
+                recordPromptSelected(cleanRoomId, null, null);
+                io.to(cleanRoomId).emit("prompt:updated", {
                     promptId: null,
                     prompt: null,
                 });

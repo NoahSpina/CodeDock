@@ -47,6 +47,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [activePrompt, setActivePrompt] = useState<CodingPrompt | null>(null);
     const [testResults, setTestResults] = useState<TestResult[] | null>(null);
     const [isTestRunning, setIsTestRunning] = useState(false);
+    const [notice, setNotice] = useState("");
 
     useEffect(() => {
         const token = localStorage.getItem("codedock_token");
@@ -155,11 +156,22 @@ export default function RoomPage({ params }: RoomPageProps) {
             setActivePrompt(prompt);
         }
 
+        function handleValidationError({
+            event,
+            message,
+        }: {
+            event: string;
+            message: string;
+        }) {
+            setNotice(`${event}: ${message}`);
+        }
+
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
         socket.on("room:execution-result", handleExecutionResult);
         socket.on("room:joined", handleRoomJoined);
+        socket.on("room:validation-error", handleValidationError);
         onPromptUpdated(handlePromptUpdated);
 
         return () => {
@@ -168,6 +180,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             socket.off("room:code-change", handleCodeChange);
             socket.off("room:execution-result", handleExecutionResult);
             socket.off("room:joined", handleRoomJoined);
+            socket.off("room:validation-error", handleValidationError);
             offPromptUpdated(handlePromptUpdated);
         };
     }, [roomId]);
@@ -283,6 +296,9 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <p className="text-slate-300">
                         You are: {username || "Loading..."}
                     </p>
+                    {notice && (
+                        <p className="mt-3 text-sm text-yellow-300">{notice}</p>
+                    )}
                 </header>
 
                 <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 min-h-[200px]">

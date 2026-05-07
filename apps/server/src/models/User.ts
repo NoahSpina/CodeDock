@@ -1,4 +1,9 @@
 import mongoose, { type Document } from "mongoose";
+import {
+    asMongooseValidator,
+    validateEmail,
+    validateUsername,
+} from "../validation.js";
 
 interface IUser extends Document {
     username: string;
@@ -9,13 +14,20 @@ interface IUser extends Document {
 
 const userSchema = new mongoose.Schema<IUser>(
     {
-        username: { type: String, required: true, unique: true, trim: true },
+        username: {
+            type: String,
+            required: true,
+            unique: true,
+            trim: true,
+            validate: asMongooseValidator(validateUsername),
+        },
         email: {
             type: String,
             required: true,
             unique: true,
             lowercase: true,
             trim: true,
+            validate: asMongooseValidator(validateEmail),
         },
         passwordHash: { type: String, required: true },
         roomsJoined: [
