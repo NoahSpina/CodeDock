@@ -1,13 +1,20 @@
 import { Router } from "express";
+import {
+    createHistorySession,
+    recordParticipantJoined,
+    recordPromptSelected,
+    recordRoomStatus,
+} from "../data/historyStore.js";
 import { Room } from "../models/Room.js";
 import { User } from "../models/User.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
+import type { Actor, RoomStatus } from "@codedock/shared";
 
 const router = Router();
 
 router.post("/", requireAuth, async (req: AuthRequest, res) => {
-    const { title } = req.body as { title?: string };
+    const { title, guestId } = req.body as { title?: string } & Partial<Actor>;
 
     if (!title || title.trim().length === 0) {
         return res.status(400).json({ error: "Room title is required" });
@@ -22,6 +29,23 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
         await User.findByIdAndUpdate(req.user!.userId, {
             $push: { roomsJoined: { roomId: room.roomId } },
         });
+
+        createHistorySession(
+            {
+                roomId: room.roomId,
+                title: room.title,
+                inviteCode: room.inviteCode,
+                status: room.status,
+                createdAt: room.createdAt.toISOString(),
+                creatorSocketId: room.creatorSocketId,
+                selectedPromptId: room.selectedPromptId,
+            },
+            {
+                userId: req.user!.userId,
+                guestId,
+                username: req.user!.username,
+            },
+        );
 
         return res.status(201).json({
             roomId: room.roomId,
@@ -39,7 +63,7 @@ router.post("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 router.post("/join", requireAuth, async (req: AuthRequest, res) => {
-    const { inviteCode } = req.body as { inviteCode?: string };
+    const { inviteCode, guestId } = req.body as { inviteCode?: string } & Partial<Actor>;
 
     if (!inviteCode || inviteCode.trim().length === 0) {
         return res.status(400).json({ error: "Invite code is required" });
@@ -63,6 +87,23 @@ router.post("/join", requireAuth, async (req: AuthRequest, res) => {
         await User.findByIdAndUpdate(req.user!.userId, {
             $addToSet: { roomsJoined: { roomId: room.roomId } },
         });
+
+        recordParticipantJoined(
+            {
+                roomId: room.roomId,
+                title: room.title,
+                inviteCode: room.inviteCode,
+                status: room.status,
+                createdAt: room.createdAt.toISOString(),
+                creatorSocketId: room.creatorSocketId,
+                selectedPromptId: room.selectedPromptId,
+            },
+            {
+                userId: req.user!.userId,
+                guestId,
+                username: req.user!.username,
+            },
+        );
 
         return res.json({
             roomId: room.roomId,
@@ -105,7 +146,7 @@ router.get("/:roomId", async (req, res) => {
 });
 
 router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
-    const { roomId } = req.params;
+    const roomId = req.params.roomId as string;
     const { promptId } = req.body as { promptId?: string | null };
 
     try {
@@ -126,10 +167,52 @@ router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
         room.selectedPromptId = promptId ?? null;
         await room.save();
 
+        const prompt = room.selectedPromptId
+            ? CODING_PROMPTS.find((p: { id: string }) => p.id === room.selectedPromptId) ?? null
+            : null;
+        recordPromptSelected(roomId, room.selectedPromptId, prompt);
+
         return res.json({ roomId, selectedPromptId: room.selectedPromptId });
     } catch (err) {
         console.error(err);
         return res.status(500).json({ error: "Failed to update prompt" });
+    }
+});
+
+router.patch("/:roomId/status", requireAuth, async (req: AuthRequest, res) => {
+    const roomId = req.params.roomId as string;
+    const { status } = req.body as { status?: RoomStatus };
+
+    if (status !== "active" && status !== "inactive") {
+        return res.status(400).json({ error: "Status must be active or inactive" });
+    }
+
+    try {
+        const room = await Room.findOne({ roomId });
+        if (!room) {
+            return res.status(404).json({ error: "Room not found" });
+        }
+
+        if (room.createdBy.toString() !== req.user!.userId) {
+            return res.status(403).json({ error: "Only the room creator can update status" });
+        }
+
+        room.status = status;
+        await room.save();
+        recordRoomStatus(roomId, status);
+
+        return res.json({
+            roomId: room.roomId,
+            title: room.title,
+            inviteCode: room.inviteCode,
+            status: room.status,
+            createdAt: room.createdAt.toISOString(),
+            creatorSocketId: room.creatorSocketId,
+            selectedPromptId: room.selectedPromptId,
+        });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to update room status" });
     }
 });
 

@@ -6,21 +6,20 @@ import type {
     ExecutionResult,
     ServerToClientEvents,
 } from "@codedock/shared";
+import { recordExecution } from "../data/historyStore.js";
 
 type CodeDockSocketServer = SocketIOServer<
     ClientToServerEvents,
     ServerToClientEvents
 >;
 
-const RUNNER_URL = process.env.RUNNER_URL || "http://localhost:5001";
+const RUNNER_URL = process.env.RUNNER_URL || "http://localhost:5000";
 
 export function createRunRoutes(io: CodeDockSocketServer) {
     const router = Router();
 
     router.post("/python", async (req, res) => {
-        const { code, roomId, username, input } = req.body as ExecutionRequest & {
-            username?: string;
-        };
+        const { code, roomId, username, guestId, userId, input } = req.body;
 
         if (!code || typeof code !== "string") {
             return res.status(400).json({
@@ -40,6 +39,8 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             const result = (await runnerResponse.json()) as ExecutionResult;
 
             if (roomId) {
+                recordExecution(roomId, { guestId, userId, username }, code, input || "", result);
+
                 io.to(roomId).emit("room:execution-result", {
                     output: result.output,
                     error: result.error,

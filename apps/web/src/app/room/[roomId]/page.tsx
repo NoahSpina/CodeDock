@@ -15,6 +15,7 @@ import type {
 } from "@codedock/shared";
 import { socket, onPromptUpdated, offPromptUpdated } from "@/lib/socket";
 import PromptPanel from "@/app/components/PromptPanel";
+import { getOrCreateActor } from "@/lib/identity";
 
 type RoomPageProps = {
     params: Promise<{
@@ -37,6 +38,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [stdin, setStdin] = useState("");
     const [error, setError] = useState("");
     const [username, setUsername] = useState("");
+    const [guestId, setGuestId] = useState("");
     const [output, setOutput] = useState("");
     const [isRunning, setIsRunning] = useState(false);
     const [isCreator, setIsCreator] = useState(false);
@@ -93,18 +95,21 @@ export default function RoomPage({ params }: RoomPageProps) {
     useEffect(() => {
         if (!roomId) return;
 
-        const savedUsername = window.localStorage.getItem("codedock_username");
-        const finalUsername =
-            savedUsername || `User-${Math.floor(Math.random() * 1000)}`;
+        const actor = getOrCreateActor();
+        const finalUsername = actor.username;
 
         setUsername(finalUsername);
-        window.localStorage.setItem("codedock_username", finalUsername);
+        setGuestId(actor.guestId || "");
 
         if (!socket.connected) {
             socket.connect();
         }
 
-        socket.emit("room:join", { roomId, username: savedUsername });
+        socket.emit("room:join", {
+            roomId,
+            username: finalUsername,
+            guestId: actor.guestId,
+        });
 
         function handleParticipants(updatedParticipants: Participant[]) {
             setParticipants(updatedParticipants);
@@ -187,6 +192,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     code,
                     roomId,
                     username,
+                    guestId,
                     input: stdin,
                 }),
             });
@@ -286,6 +292,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                     socket.emit("room:code-change", {
                                         roomId,
                                         code: updatedCode,
+                                        guestId,
                                     });
                                 }}
                                 options={{
