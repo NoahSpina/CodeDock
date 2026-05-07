@@ -11,10 +11,12 @@ import type {
     Room,
     ExecutionResult,
     ExecutionFinishedMessage,
-    CodingPrompt
+    CodingPrompt,
+    TestResult
 } from "@codedock/shared";
 import { socket, onPromptUpdated, offPromptUpdated } from "@/lib/socket";
 import PromptPanel from "@/app/components/PromptPanel";
+import { getOrCreateActor } from "@/lib/identity";
 
 type RoomPageProps = {
     params: Promise<{
@@ -37,11 +39,15 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [stdin, setStdin] = useState("");
     const [error, setError] = useState("");
     const [username, setUsername] = useState("");
+    const [guestId, setGuestId] = useState("");
     const [output, setOutput] = useState("");
     const [isRunning, setIsRunning] = useState(false);
     const [isCreator, setIsCreator] = useState(false);
     const [activePromptId, setActivePromptId] = useState<string | null>(null);
     const [activePrompt, setActivePrompt] = useState<CodingPrompt | null>(null);
+    const [testResults, setTestResults] = useState<TestResult[] | null>(null);
+    const [isTestRunning, setIsTestRunning] = useState(false);
+    const [notice, setNotice] = useState("");
 
     useEffect(() => {
         const token = localStorage.getItem("codedock_token");
@@ -93,18 +99,21 @@ export default function RoomPage({ params }: RoomPageProps) {
     useEffect(() => {
         if (!roomId) return;
 
-        const savedUsername = window.localStorage.getItem("codedock_username");
-        const finalUsername =
-            savedUsername || `User-${Math.floor(Math.random() * 1000)}`;
+        const actor = getOrCreateActor();
+        const finalUsername = actor.username;
 
         setUsername(finalUsername);
-        window.localStorage.setItem("codedock_username", finalUsername);
+        setGuestId(actor.guestId || "");
 
         if (!socket.connected) {
             socket.connect();
         }
 
-        socket.emit("room:join", { roomId, username: savedUsername });
+        socket.emit("room:join", {
+            roomId,
+            username: finalUsername,
+            guestId: actor.guestId,
+        });
 
         function handleParticipants(updatedParticipants: Participant[]) {
             setParticipants(updatedParticipants);
@@ -147,11 +156,22 @@ export default function RoomPage({ params }: RoomPageProps) {
             setActivePrompt(prompt);
         }
 
+        function handleValidationError({
+            event,
+            message,
+        }: {
+            event: string;
+            message: string;
+        }) {
+            setNotice(`${event}: ${message}`);
+        }
+
         socket.on("room:participants", handleParticipants);
         socket.on("room:chat-message", handleChatMessage);
         socket.on("room:code-change", handleCodeChange);
         socket.on("room:execution-result", handleExecutionResult);
         socket.on("room:joined", handleRoomJoined);
+        socket.on("room:validation-error", handleValidationError);
         onPromptUpdated(handlePromptUpdated);
 
         return () => {
@@ -160,6 +180,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             socket.off("room:code-change", handleCodeChange);
             socket.off("room:execution-result", handleExecutionResult);
             socket.off("room:joined", handleRoomJoined);
+            socket.off("room:validation-error", handleValidationError);
             offPromptUpdated(handlePromptUpdated);
         };
     }, [roomId]);
@@ -187,6 +208,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     code,
                     roomId,
                     username,
+                    guestId,
                     input: stdin,
                 }),
             });
@@ -201,6 +223,31 @@ export default function RoomPage({ params }: RoomPageProps) {
             setOutput("Failed to connect to server.");
         } finally {
             setIsRunning(false);
+        }
+    }
+
+    async function handleRunTests() {
+        if (!activePromptId) return;
+        setIsTestRunning(true);
+        setTestResults(null);
+
+        const token = localStorage.getItem("codedock_token") ?? "";
+
+        try {
+            const res = await fetch(`${SERVER_URL}/api/run/tests`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ roomId, promptId: activePromptId, code }),
+            });
+            const data = await res.json();
+            setTestResults(data.results ?? null);
+        } catch {
+            setTestResults(null);
+        } finally {
+            setIsTestRunning(false);
         }
     }
 
@@ -249,6 +296,9 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <p className="text-slate-300">
                         You are: {username || "Loading..."}
                     </p>
+                    {notice && (
+                        <p className="mt-3 text-sm text-yellow-300">{notice}</p>
+                    )}
                 </header>
 
                 <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 min-h-[200px]">
@@ -264,14 +314,24 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 min-h-[500px]">
                         <div className="flex items-center justify-between">
                             <h2 className="text-xl font-semibold">Code Editor</h2>
-
-                            <button
-                                onClick={handleRunCode}
-                                disabled={isRunning}
-                                className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                            >
-                                {isRunning ? "Running..." : "Run Python"}
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={handleRunCode}
+                                    disabled={isRunning}
+                                    className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                                >
+                                    {isRunning ? "Running..." : "Run Python"}
+                                </button>
+                                {activePromptId && (
+                                    <button
+                                        onClick={handleRunTests}
+                                        disabled={isTestRunning}
+                                        className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                                    >
+                                        {isTestRunning ? "Testing..." : "Run Tests"}
+                                    </button>
+                                )}
+                            </div>
                         </div>
                         <div className="mt-4 h-[500px] w-full overflow-hidden rounded-xl border border-slate-700">
                             <Editor
@@ -286,6 +346,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                     socket.emit("room:code-change", {
                                         roomId,
                                         code: updatedCode,
+                                        guestId,
                                     });
                                 }}
                                 options={{
@@ -318,7 +379,36 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 {output || "Execution output will appear here."}
                             </pre>
                         </div>
-
+                        {testResults && (
+                            <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
+                                <h2 className="text-xl font-semibold">Test Results</h2>
+                                <div className="mt-4 space-y-2">
+                                    {testResults.map((tc, i) => (
+                                        <div
+                                            key={i}
+                                            className={`rounded-lg border px-3 py-2 text-sm ${tc.passed
+                                                    ? "border-emerald-700 bg-emerald-950 text-emerald-300"
+                                                    : "border-red-700 bg-red-950 text-red-300"
+                                                }`}
+                                        >
+                                            <p className="font-medium">
+                                                {tc.passed ? "✓" : "✗"} Test {i + 1}
+                                            </p>
+                                            {!tc.passed && (
+                                                <div className="mt-1 font-mono text-xs space-y-0.5 text-slate-400">
+                                                    <p>Expected: {JSON.stringify(tc.expected)}</p>
+                                                    <p>Got: {JSON.stringify(tc.result)}</p>
+                                                    {tc.error && <p>Error: {tc.error}</p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="mt-3 text-xs text-slate-500">
+                                    {testResults.filter((r) => r.passed).length} / {testResults.length} passed
+                                </p>
+                            </div>
+                        )}
                         <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
                             <h2 className="text-xl font-semibold">Chat</h2>
 

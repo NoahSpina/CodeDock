@@ -2,26 +2,27 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { User } from "../models/User.js";
+import {
+    validateEmail,
+    validatePassword,
+    validateUsername,
+} from "../validation.js";
+import { authLimiter } from "../middleware/rateLimits.js";
 
 const router = Router();
 
-router.post("/signup", async (req, res) => {
-    const { username, email, password } = req.body as {
-        username?: string;
-        email?: string;
-        password?: string;
-    };
-
-    if (!username || !email || !password) {
+router.post("/signup", authLimiter, async (req, res) => {
+    let username: string;
+    let email: string;
+    let password: string;
+    try {
+        username = validateUsername(req.body?.username);
+        email = validateEmail(req.body?.email);
+        password = validatePassword(req.body?.password);
+    } catch (err) {
         return res
             .status(400)
-            .json({ error: "username, email, and password are required" });
-    }
-
-    if (password.length < 6) {
-        return res
-            .status(400)
-            .json({ error: "Password must be at least 6 characters" });
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
     }
 
     try {
@@ -49,31 +50,27 @@ router.post("/signup", async (req, res) => {
     }
 });
 
-router.post("/login", async (req, res) => {
-    const { email, password } = req.body as {
-        email?: string;
-        password?: string;
-    };
-
-    if (!email || !password) {
+router.post("/login", authLimiter, async (req, res) => {
+    let email: string;
+    let password: string;
+    try {
+        email = validateEmail(req.body?.email);
+        password = validatePassword(req.body?.password);
+    } catch (err) {
         return res
             .status(400)
-            .json({ error: "email and password are required" });
+            .json({ error: typeof err === "string" ? err : "Invalid input" });
     }
 
     try {
         const user = await User.findOne({ email });
         if (!user) {
-            return res
-                .status(401)
-                .json({ error: "Invalid email or password" });
+            return res.status(401).json({ error: "Invalid email or password" });
         }
 
         const match = await bcrypt.compare(password, user.passwordHash);
         if (!match) {
-            return res
-                .status(401)
-                .json({ error: "Invalid email or password" });
+            return res.status(401).json({ error: "Invalid email or password" });
         }
 
         const secret = process.env.JWT_SECRET || "change-me";

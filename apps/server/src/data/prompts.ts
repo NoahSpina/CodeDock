@@ -13,6 +13,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000"],
         starterCode: "def reverse_string(s: str) -> str:\n    pass\n",
+        testCases: [
+            { args: ["hello"], expected: "olleh", hidden: false },
+            { args: ["world"], expected: "dlrow", hidden: false },
+            { args: ["a"], expected: "a", hidden: false },
+            { args: [""], expected: "", hidden: false },
+            { args: ["abcde"], expected: "edcba", hidden: false },
+        ],
     },
     {
         id: "fizzbuzz",
@@ -26,6 +33,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= n <= 1000"],
         starterCode: "def fizzbuzz(n: int) -> list[str]:\n    pass\n",
+        testCases: [
+            { args: [1], expected: ["1"], hidden: false },
+            { args: [5], expected: ["1", "2", "Fizz", "4", "Buzz"], hidden: false },
+            { args: [3], expected: ["1", "2", "Fizz"], hidden: false },
+            { args: [15], expected: ["1", "2", "Fizz", "4", "Buzz", "Fizz", "7", "8", "Fizz", "Buzz", "11", "Fizz", "13", "14", "FizzBuzz"], hidden: false },
+            { args: [10], expected: ["1", "2", "Fizz", "4", "Buzz", "Fizz", "7", "8", "Fizz", "Buzz"], hidden: false },
+        ],
     },
     {
         id: "is-palindrome",
@@ -40,6 +54,14 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000", "s contains only lowercase letters"],
         starterCode: "def is_palindrome(s: str) -> bool:\n    pass\n",
+        testCases: [
+            { args: ["racecar"], expected: true, hidden: false },
+            { args: ["hello"], expected: false, hidden: false },
+            { args: ["madam"], expected: true, hidden: false },
+            { args: [""], expected: true, hidden: false },
+            { args: ["a"], expected: true, hidden: false },
+            { args: ["ab"], expected: false, hidden: true },
+        ],
     },
     {
         id: "sum-of-list",
@@ -54,6 +76,14 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(nums) <= 1000", "-1000 <= nums[i] <= 1000"],
         starterCode: "def sum_of_list(nums: list[int]) -> int:\n    pass\n",
+        testCases: [
+            { args: [[1, 2, 3, 4, 5]], expected: 15, hidden: false },
+            { args: [[-1, 0, 1]], expected: 0, hidden: false },
+            { args: [[]], expected: 0, hidden: false },
+            { args: [[7]], expected: 7, hidden: false },
+            { args: [[-5, -5, -5]], expected: -15, hidden: false },
+            { args: [[1000, -1000]], expected: 0, hidden: false },
+        ],
     },
     {
         id: "count-vowels",
@@ -68,6 +98,14 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000"],
         starterCode: "def count_vowels(s: str) -> int:\n    pass\n",
+        testCases: [
+            { args: ["hello"], expected: 2, hidden: false },
+            { args: ["rhythm"], expected: 0, hidden: false },
+            { args: ["AEIou"], expected: 5, hidden: false },
+            { args: [""], expected: 0, hidden: false },
+            { args: ["a"], expected: 1, hidden: false },
+            { args: ["bcdfg"], expected: 0, hidden: false },
+        ],
     },
     {
         id: "find-max",
@@ -82,6 +120,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= len(nums) <= 1000", "-10000 <= nums[i] <= 10000"],
         starterCode: "def find_max(nums: list[int]) -> int:\n    pass\n",
+        testCases: [
+            { args: [[3, 1, 4, 1, 5, 9]], expected: 9, hidden: false },
+            { args: [[-5, -1, -3]], expected: -1, hidden: false },
+            { args: [[7]], expected: 7, hidden: false },
+            { args: [[0, 0, 0]], expected: 0, hidden: false },
+            { args: [[10000, -10000]], expected: 10000, hidden: false },
+        ],
     },
     {
         id: "two-sum",
@@ -95,6 +140,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["2 <= len(nums) <= 1000", "Each input has exactly one solution"],
         starterCode: "def two_sum(nums: list[int], target: int) -> list[int]:\n    pass\n",
+        testCases: [
+            { args: [[2, 7, 11, 15], 9], expected: [0, 1], hidden: false },
+            { args: [[3, 2, 4], 6], expected: [1, 2], hidden: false },
+            { args: [[3, 3], 6], expected: [0, 1], hidden: false },
+            { args: [[1, 5, 3, 2], 4], expected: [2, 3], hidden: false },
+            { args: [[-1, -2, -3, -4], -6], expected: [1, 3], hidden: false },
+        ],
     },
     {
         id: "is-anagram",
@@ -108,6 +160,14 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= len(s), len(t) <= 1000", "s and t contain only lowercase letters"],
         starterCode: "def is_anagram(s: str, t: str) -> bool:\n    pass\n",
+        testCases: [
+            { args: ["anagram", "nagaram"], expected: true, hidden: false },
+            { args: ["rat", "car"], expected: false, hidden: false },
+            { args: ["a", "a"], expected: true, hidden: false },
+            { args: ["ab", "ba"], expected: true, hidden: false },
+            { args: ["abc", "ab"], expected: false, hidden: false },
+            { args: ["aab", "bba"], expected: false, hidden: false },
+        ],
     },
     {
         id: "flatten-list",
@@ -121,6 +181,14 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(nums) <= 100", "Each inner list has 0 to 100 elements"],
         starterCode: "def flatten(nums: list[list[int]]) -> list[int]:\n    pass\n",
+        testCases: [
+            { args: [[[1, 2], [3, 4], [5]]], expected: [1, 2, 3, 4, 5], hidden: false },
+            { args: [[[1], [], [2, 3]]], expected: [1, 2, 3], hidden: false },
+            { args: [[[]]], expected: [], hidden: false },
+            { args: [[]], expected: [], hidden: false },
+            { args: [[[7]]], expected: [7], hidden: false },
+            { args: [[[1, 2], [3, 4]]], expected: [1, 2, 3, 4], hidden: false },
+        ],
     },
     {
         id: "fibonacci",
@@ -135,5 +203,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= n <= 30"],
         starterCode: "def fibonacci(n: int) -> int:\n    pass\n",
+        testCases: [
+            { args: [0], expected: 0, hidden: false },
+            { args: [1], expected: 1, hidden: false },
+            { args: [5], expected: 5, hidden: false },
+            { args: [10], expected: 55, hidden: false },
+            { args: [2], expected: 1, hidden: false },
+            { args: [30], expected: 832040, hidden: false },
+        ],
     },
 ];

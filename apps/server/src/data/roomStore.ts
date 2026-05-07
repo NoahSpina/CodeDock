@@ -1,4 +1,4 @@
-import type { Room } from "@codedock/shared";
+import type { Actor, Room, RoomStatus } from "@codedock/shared";
 
 const rooms = new Map<string, Room>();
 
@@ -10,13 +10,17 @@ function generateInviteCode(): string {
     return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
-export function createRoom(title: string, creatorSocketId: string): Room {
+export function createRoom(title: string, creatorSocketId: string, creator?: Partial<Actor>): Room {
     const room: Room = {
         roomId: generateRoomId(),
         title,
         creatorSocketId,
+        creatorGuestId: creator?.guestId,
+        creatorUsername: creator?.username?.trim() || "Anonymous",
         inviteCode: generateInviteCode(),
         createdAt: new Date().toISOString(),
+        selectedPromptId: null,
+        status: "active",
     };
 
     rooms.set(room.roomId, room);
@@ -48,4 +52,13 @@ export function setRoomPrompt(roomId: string, promptId: string | null): Room | u
 export function setCreatorSocketId(roomId: string, socketId: string): void {
     const room = rooms.get(roomId);
     if (room) room.creatorSocketId = socketId;
+}
+
+export function setRoomStatus(roomId: string, status: RoomStatus): Room | undefined {
+    const room = rooms.get(roomId);
+    if (room) {
+        room.status = status;
+        return room;
+    }
+    return undefined;
 }
