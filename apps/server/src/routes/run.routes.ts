@@ -4,7 +4,7 @@ import type {
     ClientToServerEvents,
     ExecutionResult,
     ServerToClientEvents,
-    TestCase
+    TestCase,
 } from "@codedock/shared";
 import { recordExecution } from "../data/historyStore.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
@@ -37,18 +37,20 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             let input: string;
             let roomId: string | undefined;
             let guestId: string | undefined;
+
             try {
                 validateLanguage(req.body?.language ?? "python");
                 code = validateCode(req.body?.code);
                 input = validateStdin(req.body?.input);
                 guestId = validateGuestId(req.body?.guestId);
+
                 if (req.body?.roomId !== undefined && req.body?.roomId !== null) {
                     roomId = validateRoomId(req.body.roomId);
                 }
             } catch (err) {
-                return res
-                    .status(400)
-                    .json({ error: typeof err === "string" ? err : "Invalid input" });
+                return res.status(400).json({
+                    error: typeof err === "string" ? err : "Invalid input",
+                });
             }
 
             const userId = req.user?.userId;
@@ -86,12 +88,12 @@ export function createRunRoutes(io: CodeDockSocketServer) {
                 }
 
                 return res.status(runnerResponse.status).json(result);
-            } catch (error) {
+            } catch {
                 return res.status(500).json({
                     error: "Failed to connect to runner",
                 });
             }
-        }
+        },
     );
 
     router.post("/tests", async (req, res) => {
@@ -101,44 +103,65 @@ export function createRunRoutes(io: CodeDockSocketServer) {
         };
 
         if (!promptId || !code) {
-            return res.status(400).json({ error: "promptId and code are required" });
+            return res.status(400).json({
+                error: "promptId and code are required",
+            });
         }
 
         const prompt = CODING_PROMPTS.find((p) => p.id === promptId);
+
         if (!prompt) {
-            return res.status(404).json({ error: "Prompt not found" });
+            return res.status(404).json({
+                error: "Prompt not found",
+            });
         }
 
-        const visibleTestCases = prompt.testCases.filter((tc: TestCase) => !tc.hidden);
+        const visibleTestCases = prompt.testCases.filter(
+            (tc: TestCase) => !tc.hidden,
+        );
+
         const harness = buildHarness(code, prompt.id, visibleTestCases);
 
         try {
             const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                },
                 body: JSON.stringify({ code: harness }),
             });
 
             const result = (await runnerResponse.json()) as ExecutionResult;
-            const ranBy = username?.trim() || "Anonymous";
 
             if (result.timedOut) {
-                return res.json({ error: "Code timed out", results: [] });
+                return res.json({
+                    error: "Code timed out",
+                    results: [],
+                });
             }
 
-            const results = parseHarnessOutput(result.output, result.error, visibleTestCases);
+            const results = parseHarnessOutput(
+                result.output,
+                result.error,
+                visibleTestCases,
+            );
+
             return res.json({ results });
         } catch {
-            return res.status(500).json({ error: "Failed to connect to runner" });
+            return res.status(500).json({
+                error: "Failed to connect to runner",
+            });
         }
     });
 
     return router;
 }
-<<<<<<< HEAD
-=======
 
-function buildHarness(code: string, promptId: string, testCases: TestCase[]): string {
+function buildHarness(
+    code: string,
+    promptId: string,
+    testCases: TestCase[],
+): string {
     const fnName = promptId.replace(/-/g, "_");
     const lines: string[] = [];
 
@@ -151,14 +174,19 @@ function buildHarness(code: string, promptId: string, testCases: TestCase[]): st
     testCases.forEach((tc, i) => {
         const argsJson = JSON.stringify(JSON.stringify(tc.args));
         const expectedJson = JSON.stringify(JSON.stringify(tc.expected));
-        lines.push(`try:`);
+
+        lines.push("try:");
         lines.push(`    args = json.loads(${argsJson})`);
         lines.push(`    expected = json.loads(${expectedJson})`);
         lines.push(`    result = ${fnName}(*args)`);
-        lines.push(`    passed = result == expected`);
-        lines.push(`    results.append({"index": ${i}, "passed": passed, "result": result, "expected": expected, "error": None})`);
-        lines.push(`except Exception as e:`);
-        lines.push(`    results.append({"index": ${i}, "passed": False, "result": None, "expected": json.loads(${expectedJson}), "error": str(e)})`);
+        lines.push("    passed = result == expected");
+        lines.push(
+            `    results.append({"index": ${i}, "passed": passed, "result": result, "expected": expected, "error": None})`,
+        );
+        lines.push("except Exception as e:");
+        lines.push(
+            `    results.append({"index": ${i}, "passed": False, "result": None, "expected": json.loads(${expectedJson}), "error": str(e)})`,
+        );
         lines.push("");
     });
 
@@ -170,8 +198,14 @@ function buildHarness(code: string, promptId: string, testCases: TestCase[]): st
 function parseHarnessOutput(
     output: string,
     stderr: string,
-    testCases: TestCase[]
-): { index: number; passed: boolean; result: unknown; expected: unknown; error: string | null }[] {
+    testCases: TestCase[],
+): {
+    index: number;
+    passed: boolean;
+    result: unknown;
+    expected: unknown;
+    error: string | null;
+}[] {
     const marker = "__TEST_RESULTS__";
     const markerIndex = output.indexOf(marker);
 
@@ -197,4 +231,3 @@ function parseHarnessOutput(
         }));
     }
 }
->>>>>>> main
