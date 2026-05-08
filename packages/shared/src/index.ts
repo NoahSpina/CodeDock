@@ -81,10 +81,17 @@ export interface ExecutionFinishedMessage {
     runtimeMs?: number;
 }
 
+export interface StdinChangePayload {
+    roomId: string;
+    stdin: string;
+    guestId?: string;
+}
+
 export interface ClientToServerEvents {
     "room:join": (payload: JoinRoomPayload) => void;
     "room:chat-message": (payload: ChatMessagePayload) => void;
     "room:code-change": (payload: CodeChangePayload) => void;
+    "room:stdin-change": (payload: StdinChangePayload) => void;
     "prompt:select": (payload: { roomId: string; promptId: string }) => void;
     "prompt:clear": (payload: { roomId: string }) => void;
 }
@@ -93,9 +100,10 @@ export interface ServerToClientEvents {
     "room:participants": (participants: Participant[]) => void;
     "room:chat-message": (message: ChatMessage) => void;
     "room:code-change": (payload: CodeChangeMessage) => void;
+    "room:stdin-change": (payload: { stdin: string }) => void;
     "room:execution-result": (payload: ExecutionFinishedMessage) => void;
     "prompt:updated": (payload: { promptId: string | null; prompt: CodingPrompt | null }) => void;
-    "room:joined": (payload: { isCreator: boolean }) => void;
+    "room:joined": (payload: { isCreator: boolean; code: string; stdin: string }) => void;
     "room:validation-error": (payload: { event: string; message: string }) => void;
 }
 

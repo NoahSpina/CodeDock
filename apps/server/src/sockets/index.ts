@@ -6,6 +6,7 @@ import type {
     CodeChangePayload,
     JoinRoomPayload,
     ServerToClientEvents,
+    StdinChangePayload,
 } from "@codedock/shared";
 import {
     addParticipant,
@@ -25,6 +26,7 @@ import {
     validateGuestId,
     validatePromptId,
     validateRoomId,
+    validateStdin,
 } from "../validation.js";
 
 interface SocketData {
@@ -142,7 +144,11 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                     });
                 }
 
-                socket.emit("room:joined", { isCreator });
+                socket.emit("room:joined", {
+                    isCreator,
+                    code: room.currentCode || "",
+                    stdin: room.currentStdin || "",
+                });
             } catch (err) {
                 console.error("room:join error", err);
             }
@@ -185,6 +191,25 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
 
             recordCodeChanged(cleanRoomId, cleanCode);
             socket.to(cleanRoomId).emit("room:code-change", { code: cleanCode });
+            Room.findOneAndUpdate({ roomId: cleanRoomId }, { currentCode: cleanCode }).catch((err) =>
+                console.error("failed to save code:", err)
+            );
+        });
+
+        socket.on("room:stdin-change", ({ roomId, stdin }: StdinChangePayload) => {
+            let cleanRoomId: string;
+            let cleanStdin: string;
+            try {
+                cleanRoomId = validateRoomId(roomId);
+                cleanStdin = validateStdin(stdin);
+            } catch (err) {
+                return emitValidationError(socket, "room:stdin-change", err);
+            }
+
+            socket.to(cleanRoomId).emit("room:stdin-change", { stdin: cleanStdin });
+            Room.findOneAndUpdate({ roomId: cleanRoomId }, { currentStdin: cleanStdin }).catch((err) =>
+                console.error("failed to save stdin:", err)
+            );
         });
 
         socket.on(
