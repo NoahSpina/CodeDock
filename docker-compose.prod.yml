@@ -1,0 +1,71 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL}
+    image: codedock-web:prod
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL}
+    depends_on:
+      server:
+        condition: service_started
+
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: codedock-server:prod
+    restart: unless-stopped
+    ports:
+      - "${SERVER_PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      MONGODB_URI: mongodb://mongo:27017/codedock
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      RUNNER_URL: http://runner:5000
+    depends_on:
+      mongo:
+        condition: service_healthy
+      runner:
+        condition: service_started
+
+  runner:
+    build:
+      context: .
+      dockerfile: apps/runner/Dockerfile
+    image: codedock-runner:prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      EXEC_TIMEOUT_MS: ${EXEC_TIMEOUT_MS:-5000}
+      MAX_OUTPUT_BYTES: ${MAX_OUTPUT_BYTES:-100000}
+      PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-alpine}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  mongo-data:
