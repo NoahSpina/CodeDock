@@ -24,7 +24,9 @@ export default function Home() {
             router.push("/login");
             return;
         }
-        setUsername(localStorage.getItem("codedock_username"));
+        queueMicrotask(() => {
+            setUsername(localStorage.getItem("codedock_username"));
+        });
     }, [router]);
 
     function handleLogout() {
