@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Editor from "@monaco-editor/react";
@@ -48,6 +48,18 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [testResults, setTestResults] = useState<TestResult[] | null>(null);
     const [isTestRunning, setIsTestRunning] = useState(false);
     const [notice, setNotice] = useState("");
+
+    const starterHandledPromptIdRef = useRef<string | null>(null);
+    const declinedStarterPromptIdRef = useRef<string | null>(null);
+    const activePromptRef = useRef<CodingPrompt | null>(null);
+    const activePromptIdRef = useRef<string | null>(null);
+    const codeRef = useRef(code);
+
+    useLayoutEffect(() => {
+        codeRef.current = code;
+        activePromptRef.current = activePrompt;
+        activePromptIdRef.current = activePromptId;
+    }, [code, activePrompt, activePromptId]);
 
     useEffect(() => {
         const token = localStorage.getItem("codedock_token");
@@ -99,11 +111,62 @@ export default function RoomPage({ params }: RoomPageProps) {
     useEffect(() => {
         if (!roomId) return;
 
+        if (!activePromptId || !activePrompt) {
+            starterHandledPromptIdRef.current = null;
+            declinedStarterPromptIdRef.current = null;
+            return;
+        }
+
+        if (starterHandledPromptIdRef.current === activePromptId) {
+            return;
+        }
+
+        const starter = activePrompt.starterCode;
+        const trimmed = codeRef.current.trim();
+
+        if (!trimmed) {
+            queueMicrotask(() => {
+                setCode(starter);
+                socket.emit("room:code-change", {
+                    roomId,
+                    code: starter,
+                    guestId,
+                });
+            });
+            starterHandledPromptIdRef.current = activePromptId;
+            declinedStarterPromptIdRef.current = null;
+            return;
+        }
+
+        const replace = window.confirm(
+            "Replace the current code with this prompt's starter code?"
+        );
+        if (replace) {
+            queueMicrotask(() => {
+                setCode(starter);
+                socket.emit("room:code-change", {
+                    roomId,
+                    code: starter,
+                    guestId,
+                });
+            });
+            declinedStarterPromptIdRef.current = null;
+        } else {
+            declinedStarterPromptIdRef.current = activePromptId;
+        }
+        starterHandledPromptIdRef.current = activePromptId;
+    }, [activePromptId, activePrompt, roomId, guestId]);
+
+    useEffect(() => {
+        if (!roomId) return;
+
         const actor = getOrCreateActor();
         const finalUsername = actor.username;
 
-        setUsername(finalUsername);
-        setGuestId(actor.guestId || "");
+        queueMicrotask(() => {
+            setUsername(finalUsername);
+            setGuestId(actor.guestId || "");
+        });
 
         if (!socket.connected) {
             socket.connect();
@@ -124,6 +187,16 @@ export default function RoomPage({ params }: RoomPageProps) {
         }
 
         function handleCodeChange(payload: CodeChangeMessage) {
+            const prompt = activePromptRef.current;
+            const pid = activePromptIdRef.current;
+            if (
+                pid &&
+                declinedStarterPromptIdRef.current === pid &&
+                prompt &&
+                payload.code === prompt.starterCode
+            ) {
+                return;
+            }
             setCode(payload.code);
         }
 

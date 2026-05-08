@@ -41,7 +41,7 @@ export default function PromptSelector({ roomId, currentPromptId, onClose }: Pro
             <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-md mx-4 flex flex-col max-h-[80vh]">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
                     <h2 className="text-white font-semibold">Select a Prompt</h2>
-                    <button onClick={onClose} className="text-zinc-400 hover:text-white">✕</button>
+                    <button onClick={onClose} className="text-zinc-400 hover:text-white cursor-pointer">✕</button>
                 </div>
 
                 <div className="overflow-y-auto flex-1 p-3 space-y-2">
@@ -49,7 +49,7 @@ export default function PromptSelector({ roomId, currentPromptId, onClose }: Pro
                         <button
                             key={p.id}
                             onClick={() => setSelected(selected === p.id ? null : p.id)}
-                            className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors ${selected === p.id
+                            className={`w-full text-left px-3 py-2 rounded-lg border text-sm transition-colors cursor-pointer ${selected === p.id
                                     ? "border-blue-500 bg-blue-500/10 text-white"
                                     : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
                                 }`}
@@ -61,13 +61,13 @@ export default function PromptSelector({ roomId, currentPromptId, onClose }: Pro
                 </div>
 
                 <div className="flex gap-2 justify-end px-4 py-3 border-t border-zinc-700">
-                    <button onClick={onClose} className="px-3 py-1.5 text-sm text-zinc-400 hover:text-white">
+                    <button onClick={onClose} className="px-3 py-1.5 text-sm text-zinc-400 hover:text-white cursor-pointer">
                         Cancel
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={selected === currentPromptId}
-                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40"
+                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-40 cursor-pointer"
                     >
                         {selected ? "Set Prompt" : "Clear Prompt"}
                     </button>

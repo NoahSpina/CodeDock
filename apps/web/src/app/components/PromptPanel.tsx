@@ -35,7 +35,7 @@ export default function PromptPanel({ roomId, prompt, isCreator, promptId }: Pro
                             <p className="text-sm">No prompt selected yet.</p>
                             <button
                                 onClick={() => setShowSelector(true)}
-                                className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-500 transition-all"
+                                className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-500 transition-all cursor-pointer"
                             >
                                 Assign Prompt
                             </button>
@@ -70,7 +70,7 @@ export default function PromptPanel({ roomId, prompt, isCreator, promptId }: Pro
                         {isCreator && (
                             <button
                                 onClick={() => setShowSelector(true)}
-                                className="text-xs px-2.5 py-1 rounded-md bg-white/6 text-white/50 hover:bg-white/10 hover:text-white/80 transition-all border border-white/8"
+                                className="text-xs px-2.5 py-1 rounded-md bg-white/6 text-white/50 hover:bg-white/10 hover:text-white/80 transition-all border border-white/8 cursor-pointer"
                             >
                                 Change
                             </button>
