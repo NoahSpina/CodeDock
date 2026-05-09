@@ -67,14 +67,6 @@ export default function PromptPanel({ roomId, prompt, isCreator, promptId }: Pro
                         <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${DIFFICULTY_STYLES[prompt.difficulty]}`}>
                             {prompt.difficulty}
                         </span>
-                        {isCreator && (
-                            <button
-                                onClick={() => setShowSelector(true)}
-                                className="text-xs px-2.5 py-1 rounded-md bg-white/6 text-white/50 hover:bg-white/10 hover:text-white/80 transition-all border border-white/8 cursor-pointer"
-                            >
-                                Change
-                            </button>
-                        )}
                     </div>
                 </div>
 
@@ -108,13 +100,6 @@ export default function PromptPanel({ roomId, prompt, isCreator, promptId }: Pro
                 )}
             </div>
 
-            {showSelector && (
-                <PromptSelector
-                    roomId={roomId}
-                    currentPromptId={promptId}
-                    onClose={() => setShowSelector(false)}
-                />
-            )}
         </>
     );
 }

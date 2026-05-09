@@ -19,7 +19,7 @@ export async function connectDB() {
             await mongoose.connect(uri);
             console.log("Connected to MongoDB");
 
-            await seedPromptsIfEmpty();
+            await syncDefaultPrompts();
 
             return;
         } catch (err) {
@@ -41,10 +41,15 @@ export async function connectDB() {
     throw lastErr;
 }
 
-async function seedPromptsIfEmpty() {
-    const count = await Prompt.countDocuments();
-    if (count === 0) {
-        await Prompt.insertMany(CODING_PROMPTS);
-        console.log(`Seeded ${CODING_PROMPTS.length} prompts`);
-    }
+async function syncDefaultPrompts() {
+    await Prompt.bulkWrite(
+        CODING_PROMPTS.map((prompt) => ({
+            updateOne: {
+                filter: { id: prompt.id },
+                update: { $set: prompt },
+                upsert: true,
+            },
+        })),
+    );
+    console.log(`Synced ${CODING_PROMPTS.length} prompts`);
 }

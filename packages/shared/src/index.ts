@@ -57,6 +57,7 @@ export interface ExecutionRequest {
     language: "python";
     code: string;
     roomId?: string;
+    promptId?: string | null;
     input?: string;
     userId?: string;
     username?: string;
@@ -81,10 +82,24 @@ export interface ExecutionFinishedMessage {
     runtimeMs?: number;
 }
 
+export interface TestRunFinishedMessage {
+    results: TestResult[];
+    error?: string;
+    ranBy: string;
+    sentAt: string;
+    runtimeMs?: number;
+}
+
 export interface StdinChangePayload {
     roomId: string;
     stdin: string;
     guestId?: string;
+}
+
+export interface EndInterviewPayload {
+    roomId: string;
+    code: string;
+    stdin: string;
 }
 
 export interface ClientToServerEvents {
@@ -92,6 +107,7 @@ export interface ClientToServerEvents {
     "room:chat-message": (payload: ChatMessagePayload) => void;
     "room:code-change": (payload: CodeChangePayload) => void;
     "room:stdin-change": (payload: StdinChangePayload) => void;
+    "room:end-interview": (payload: EndInterviewPayload) => void;
     "prompt:select": (payload: { roomId: string; promptId: string }) => void;
     "prompt:clear": (payload: { roomId: string }) => void;
 }
@@ -102,8 +118,10 @@ export interface ServerToClientEvents {
     "room:code-change": (payload: CodeChangeMessage) => void;
     "room:stdin-change": (payload: { stdin: string }) => void;
     "room:execution-result": (payload: ExecutionFinishedMessage) => void;
+    "room:test-results": (payload: TestRunFinishedMessage) => void;
     "prompt:updated": (payload: { promptId: string | null; prompt: CodingPrompt | null }) => void;
     "room:joined": (payload: { isCreator: boolean; code: string; stdin: string }) => void;
+    "room:status-change": (payload: { status: RoomStatus }) => void;
     "room:validation-error": (payload: { event: string; message: string }) => void;
 }
 
@@ -122,6 +140,8 @@ export interface CodingPrompt {
     examples: { input: string; output: string; explanation?: string }[];
     constraints: string[];
     starterCode: string;
+    functionName: string;
+    stdinAdapter: string;
     testCases: TestCase[];
 }
 
@@ -134,6 +154,7 @@ export interface TestResult {
 }
 
 export interface InterviewExecution {
+    kind?: "code" | "tests";
     ranBy: Actor;
     code: string;
     stdin: string;
@@ -142,6 +163,7 @@ export interface InterviewExecution {
     exitCode: number | null;
     timedOut?: boolean;
     runtimeMs?: number;
+    testResults?: TestResult[];
     createdAt: string;
 }
 

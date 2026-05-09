@@ -9,6 +9,9 @@ interface IPrompt extends Document {
     examples: { input: string; output: string; explanation?: string }[];
     constraints: string[];
     starterCode: string;
+    functionName: string;
+    stdinAdapter: string;
+    testCases: { args: unknown[]; expected: unknown; hidden: boolean }[];
 }
 
 const promptSchema = new mongoose.Schema<IPrompt>({
@@ -30,6 +33,15 @@ const promptSchema = new mongoose.Schema<IPrompt>({
     ],
     constraints: [String],
     starterCode: { type: String, required: true },
+    functionName: { type: String, required: true },
+    stdinAdapter: { type: String, required: true },
+    testCases: [
+        {
+            args: [mongoose.Schema.Types.Mixed],
+            expected: mongoose.Schema.Types.Mixed,
+            hidden: Boolean,
+        },
+    ],
 });
 
 export const Prompt = mongoose.model<IPrompt>("Prompt", promptSchema);

@@ -148,7 +148,9 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                                 className="rounded-lg border border-slate-700 bg-slate-950 p-4"
                                             >
                                                 <div className="flex flex-wrap justify-between gap-2 text-sm text-slate-400">
-                                                    <p>{execution.ranBy.username} ran code</p>
+                                                    <p>
+                                                        {execution.ranBy.username} ran {execution.kind === "tests" ? "tests" : "code"}
+                                                    </p>
                                                     <p>{formatDate(execution.createdAt)}</p>
                                                 </div>
                                                 <p className="mt-2 text-sm text-slate-300">
@@ -159,6 +161,27 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                                 <pre className="mt-3 whitespace-pre-wrap rounded border border-slate-800 bg-slate-900 p-3 font-mono text-sm text-slate-300">
                                                     {[execution.output, execution.error].filter(Boolean).join("\n") || "No output."}
                                                 </pre>
+                                                {execution.testResults && execution.testResults.length > 0 ? (
+                                                    <div className="mt-3 grid gap-2 text-sm">
+                                                        {execution.testResults.map((test) => (
+                                                            <div
+                                                                key={test.index}
+                                                                className={`rounded border px-3 py-2 ${test.passed
+                                                                    ? "border-emerald-800 bg-emerald-950 text-emerald-200"
+                                                                    : "border-red-800 bg-red-950 text-red-200"
+                                                                    }`}
+                                                            >
+                                                                <p>Test {test.index + 1}: {test.passed ? "passed" : "failed"}</p>
+                                                                {!test.passed ? (
+                                                                    <p className="mt-1 font-mono text-xs text-slate-300">
+                                                                        Expected {JSON.stringify(test.expected)}, got {JSON.stringify(test.result)}
+                                                                        {test.error ? ` - ${test.error}` : ""}
+                                                                    </p>
+                                                                ) : null}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
                                             </article>
                                         ))
                                     )}

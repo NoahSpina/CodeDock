@@ -4,6 +4,7 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+      - node-modules:/workspace/node_modules
     command: sh -c "npm ci"
 
   web:
@@ -18,6 +19,7 @@ services:
       NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
     volumes:
       - .:/workspace
+      - node-modules:/workspace/node_modules
     depends_on:
       deps:
         condition: service_completed_successfully
@@ -39,6 +41,7 @@ services:
       RUNNER_URL: http://runner:5000
     volumes:
       - .:/workspace
+      - node-modules:/workspace/node_modules
     depends_on:
       deps:
         condition: service_completed_successfully
@@ -61,6 +64,7 @@ services:
       PYTHON_IMAGE: python:3.12-alpine
     volumes:
       - .:/workspace
+      - node-modules:/workspace/node_modules
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       deps:
@@ -82,3 +86,4 @@ services:
 
 volumes:
   mongo-data:
+  node-modules:

@@ -4,6 +4,7 @@ import type {
     ChatMessagePayload,
     ClientToServerEvents,
     CodeChangePayload,
+    EndInterviewPayload,
     JoinRoomPayload,
     ServerToClientEvents,
     StdinChangePayload,
@@ -18,6 +19,7 @@ import {
     recordCodeChanged,
     recordParticipantJoined,
     recordPromptSelected,
+    recordRoomStatus,
 } from "../data/historyStore.js";
 import { Room } from "../models/Room.js";
 import {
@@ -96,7 +98,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
 
             try {
                 const room = await Room.findOne({ roomId: cleanRoomId });
-                if (!room || room.status === "inactive") return;
+                if (!room) return;
 
                 socket.join(cleanRoomId);
                 addParticipant(cleanRoomId, {
@@ -131,7 +133,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                         guestId: cleanGuestId,
                         username,
                     },
-                );
+                ).catch((err) => console.error("failed to save participant:", err));
 
                 if (room.selectedPromptId) {
                     const prompt =
@@ -149,6 +151,10 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                     code: room.currentCode || "",
                     stdin: room.currentStdin || "",
                 });
+
+                if (room.status === "inactive") {
+                    socket.emit("room:status-change", { status: "inactive" });
+                }
             } catch (err) {
                 console.error("room:join error", err);
             }
@@ -189,11 +195,18 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                 return emitValidationError(socket, "room:code-change", err);
             }
 
-            recordCodeChanged(cleanRoomId, cleanCode);
-            socket.to(cleanRoomId).emit("room:code-change", { code: cleanCode });
-            Room.findOneAndUpdate({ roomId: cleanRoomId }, { currentCode: cleanCode }).catch((err) =>
-                console.error("failed to save code:", err)
-            );
+            Room.findOne({ roomId: cleanRoomId })
+                .then((room) => {
+                    if (!room || room.status === "inactive") return;
+
+                    recordCodeChanged(cleanRoomId, cleanCode).catch((err) =>
+                        console.error("failed to save history code:", err)
+                    );
+                    socket.to(cleanRoomId).emit("room:code-change", { code: cleanCode });
+                    room.currentCode = cleanCode;
+                    return room.save();
+                })
+                .catch((err) => console.error("failed to save code:", err));
         });
 
         socket.on("room:stdin-change", ({ roomId, stdin }: StdinChangePayload) => {
@@ -206,10 +219,66 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                 return emitValidationError(socket, "room:stdin-change", err);
             }
 
-            socket.to(cleanRoomId).emit("room:stdin-change", { stdin: cleanStdin });
-            Room.findOneAndUpdate({ roomId: cleanRoomId }, { currentStdin: cleanStdin }).catch((err) =>
-                console.error("failed to save stdin:", err)
-            );
+            Room.findOne({ roomId: cleanRoomId })
+                .then((room) => {
+                    if (!room || room.status === "inactive") return;
+
+                    socket.to(cleanRoomId).emit("room:stdin-change", { stdin: cleanStdin });
+                    room.currentStdin = cleanStdin;
+                    return room.save();
+                })
+                .catch((err) => console.error("failed to save stdin:", err));
+        });
+
+        socket.on("room:end-interview", async ({ roomId, code, stdin }: EndInterviewPayload) => {
+            let cleanRoomId: string;
+            let cleanCode: string;
+            let cleanStdin: string;
+            try {
+                cleanRoomId = validateRoomId(roomId);
+                if (typeof code !== "string") throw "Code must be a string";
+                if (code.length > 20000) throw "Code must be at most 20000 characters long";
+                cleanCode = code;
+                cleanStdin = validateStdin(stdin);
+            } catch (err) {
+                return emitValidationError(socket, "room:end-interview", err);
+            }
+
+            try {
+                const room = await Room.findOne({ roomId: cleanRoomId });
+                if (!room) return;
+
+                if (room.createdBy.toString() !== socket.data.userId) {
+                    return emitValidationError(
+                        socket,
+                        "room:end-interview",
+                        "Only the interviewer can end the interview",
+                    );
+                }
+
+                room.status = "inactive";
+                room.currentCode = cleanCode;
+                room.currentStdin = cleanStdin;
+                await room.save();
+
+                const prompt = room.selectedPromptId
+                    ? CODING_PROMPTS.find((p) => p.id === room.selectedPromptId) ?? null
+                    : null;
+
+                await recordCodeChanged(cleanRoomId, cleanCode);
+                await recordPromptSelected(cleanRoomId, room.selectedPromptId, prompt);
+                await recordRoomStatus(cleanRoomId, "inactive");
+
+                io.to(cleanRoomId).emit("room:status-change", { status: "inactive" });
+                io.to(cleanRoomId).emit("room:chat-message", {
+                    socketId: socket.id,
+                    username: "System",
+                    message: "The interviewer ended this interview.",
+                    sentAt: new Date().toISOString(),
+                });
+            } catch (err) {
+                console.error("room:end-interview error", err);
+            }
         });
 
         socket.on(
@@ -234,6 +303,13 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                     const room = await Room.findOne({ roomId: cleanRoomId });
                     if (!room) return;
                     if (room.createdBy.toString() !== socket.data.userId) return;
+                    if (room.selectedPromptId) {
+                        return emitValidationError(
+                            socket,
+                            "prompt:select",
+                            "Prompt has already been assigned",
+                        );
+                    }
 
                     const prompt =
                         CODING_PROMPTS.find(
@@ -244,7 +320,7 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                     room.selectedPromptId = cleanPromptId;
                     await room.save();
 
-                    recordPromptSelected(cleanRoomId, cleanPromptId, prompt);
+                    await recordPromptSelected(cleanRoomId, cleanPromptId, prompt);
                     io.to(cleanRoomId).emit("prompt:updated", {
                         promptId: cleanPromptId,
                         prompt,
@@ -267,11 +343,18 @@ export function registerSocketHandlers(io: CodeDockSocketServer) {
                 const room = await Room.findOne({ roomId: cleanRoomId });
                 if (!room) return;
                 if (room.createdBy.toString() !== socket.data.userId) return;
+                if (room.selectedPromptId) {
+                    return emitValidationError(
+                        socket,
+                        "prompt:clear",
+                        "Prompt has already been assigned",
+                    );
+                }
 
                 room.selectedPromptId = null;
                 await room.save();
 
-                recordPromptSelected(cleanRoomId, null, null);
+                await recordPromptSelected(cleanRoomId, null, null);
                 io.to(cleanRoomId).emit("prompt:updated", {
                     promptId: null,
                     prompt: null,
