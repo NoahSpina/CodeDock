@@ -55,6 +55,23 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
         loadSession();
     }, [params]);
 
+    const runCount = session ? session.executions.length : 0;
+    const lastTestRun = session
+        ? [...session.executions].reverse().find(
+            (e) => e.kind === "tests" && e.testResults && e.testResults.length > 0,
+        )
+        : undefined;
+    const lastTestPassed = lastTestRun
+        ? lastTestRun.testResults!.filter((t) => t.passed).length
+        : 0;
+    const lastTestTotal = lastTestRun ? lastTestRun.testResults!.length : 0;
+
+    const endTime = session ? (session.closedAt || session.updatedAt) : null;
+    const durationMs = session && endTime
+        ? new Date(endTime).getTime() - new Date(session.createdAt).getTime()
+        : 0;
+    const durationMinutes = Math.max(0, Math.round(durationMs / 60000));
+
     return (
         <main className="min-h-screen bg-slate-950 p-6 text-white">
             <div className="mx-auto max-w-7xl">
@@ -102,6 +119,11 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                     <p>
                                         Candidates: {session.candidates.map((candidate) => candidate.username).join(", ") || "None"}
                                     </p>
+                                    <p>Total runs: {runCount}</p>
+                                    {lastTestRun ? (
+                                        <p>Last test run: {lastTestPassed} / {lastTestTotal} passed</p>
+                                    ) : null}
+                                    <p>Duration: {durationMinutes} min{session.closedAt ? "" : " (so far)"}</p>
                                 </div>
                             </div>
 
@@ -161,25 +183,48 @@ export default function HistoryDetailPage({ params }: HistoryDetailPageProps) {
                                                 <pre className="mt-3 whitespace-pre-wrap rounded border border-slate-800 bg-slate-900 p-3 font-mono text-sm text-slate-300">
                                                     {[execution.output, execution.error].filter(Boolean).join("\n") || "No output."}
                                                 </pre>
+                                                <details className="mt-3">
+                                                    <summary className="cursor-pointer text-sm text-slate-400">Code</summary>
+                                                    <pre className="mt-2 max-h-[300px] overflow-auto whitespace-pre-wrap rounded border border-slate-800 bg-slate-900 p-3 font-mono text-sm text-slate-300">
+                                                        {execution.code}
+                                                    </pre>
+                                                </details>
+                                                {execution.stdin ? (
+                                                    <details className="mt-2">
+                                                        <summary className="cursor-pointer text-sm text-slate-400">Stdin</summary>
+                                                        <pre className="mt-2 whitespace-pre-wrap rounded border border-slate-800 bg-slate-900 p-3 font-mono text-sm text-slate-300">
+                                                            {execution.stdin}
+                                                        </pre>
+                                                    </details>
+                                                ) : null}
                                                 {execution.testResults && execution.testResults.length > 0 ? (
                                                     <div className="mt-3 grid gap-2 text-sm">
-                                                        {execution.testResults.map((test) => (
-                                                            <div
-                                                                key={test.index}
-                                                                className={`rounded border px-3 py-2 ${test.passed
-                                                                    ? "border-emerald-800 bg-emerald-950 text-emerald-200"
-                                                                    : "border-red-800 bg-red-950 text-red-200"
-                                                                    }`}
-                                                            >
-                                                                <p>Test {test.index + 1}: {test.passed ? "passed" : "failed"}</p>
-                                                                {!test.passed ? (
-                                                                    <p className="mt-1 font-mono text-xs text-slate-300">
-                                                                        Expected {JSON.stringify(test.expected)}, got {JSON.stringify(test.result)}
-                                                                        {test.error ? ` - ${test.error}` : ""}
-                                                                    </p>
-                                                                ) : null}
-                                                            </div>
-                                                        ))}
+                                                        {execution.testResults.map((test) => {
+                                                            const visibleCases = session.selectedPrompt?.testCases.filter((tc) => !tc.hidden) ?? [];
+                                                            const args = visibleCases[test.index]?.args;
+                                                            return (
+                                                                <div
+                                                                    key={test.index}
+                                                                    className={`rounded border px-3 py-2 ${test.passed
+                                                                        ? "border-emerald-800 bg-emerald-950 text-emerald-200"
+                                                                        : "border-red-800 bg-red-950 text-red-200"
+                                                                        }`}
+                                                                >
+                                                                    <p>Test {test.index + 1}: {test.passed ? "passed" : "failed"}</p>
+                                                                    {args ? (
+                                                                        <p className="mt-1 font-mono text-xs text-slate-300">
+                                                                            Input {JSON.stringify(args)}
+                                                                        </p>
+                                                                    ) : null}
+                                                                    {!test.passed ? (
+                                                                        <p className="mt-1 font-mono text-xs text-slate-300">
+                                                                            Expected {JSON.stringify(test.expected)}, got {JSON.stringify(test.result)}
+                                                                            {test.error ? ` - ${test.error}` : ""}
+                                                                        </p>
+                                                                    ) : null}
+                                                                </div>
+                                                            );
+                                                        })}
                                                     </div>
                                                 ) : null}
                                             </article>
