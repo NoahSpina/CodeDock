@@ -36,7 +36,7 @@ function hasIdentity(actor: Partial<Actor>) {
     return Boolean(actor.userId || actor.guestId);
 }
 
-router.get("/interviewer", readLimiter, (req, res) => {
+router.get("/interviewer", readLimiter, async (req, res) => {
     let actor: Partial<Actor>;
     try {
         actor = actorFromQuery(req.query as Record<string, unknown>);
@@ -50,10 +50,15 @@ router.get("/interviewer", readLimiter, (req, res) => {
         return res.status(400).json({ error: "guestId or userId is required" });
     }
 
-    return res.json(listInterviewerHistory(actor));
+    try {
+        return res.json(await listInterviewerHistory(actor));
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to load history" });
+    }
 });
 
-router.get("/candidate", readLimiter, (req, res) => {
+router.get("/candidate", readLimiter, async (req, res) => {
     let actor: Partial<Actor>;
     try {
         actor = actorFromQuery(req.query as Record<string, unknown>);
@@ -67,10 +72,15 @@ router.get("/candidate", readLimiter, (req, res) => {
         return res.status(400).json({ error: "guestId or userId is required" });
     }
 
-    return res.json(listCandidateHistory(actor));
+    try {
+        return res.json(await listCandidateHistory(actor));
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to load history" });
+    }
 });
 
-router.get("/:roomId", readLimiter, (req, res) => {
+router.get("/:roomId", readLimiter, async (req, res) => {
     let roomId: string;
     let actor: Partial<Actor>;
     try {
@@ -86,7 +96,13 @@ router.get("/:roomId", readLimiter, (req, res) => {
         return res.status(400).json({ error: "guestId or userId is required" });
     }
 
-    const session = getHistorySession(roomId, actor);
+    let session;
+    try {
+        session = await getHistorySession(roomId, actor);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: "Failed to load history session" });
+    }
 
     if (!session) {
         return res.status(404).json({ error: "History session not found" });

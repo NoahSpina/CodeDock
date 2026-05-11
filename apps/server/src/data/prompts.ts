@@ -1,5 +1,68 @@
 import type { CodingPrompt } from "@codedock/shared";
 
+const rawStringAdapter = (fnName: string) => [
+    "import sys",
+    "",
+    "_stdin = sys.stdin.read()",
+    "if _stdin.endswith(\"\\n\"):",
+    "    _stdin = _stdin[:-1]",
+    `print(${fnName}(_stdin))`,
+].join("\n");
+
+const intAdapter = (fnName: string) => [
+    "import sys",
+    "",
+    "_stdin = sys.stdin.read().strip()",
+    `print(${fnName}(int(_stdin)))`,
+].join("\n");
+
+const literalAdapter = (fnName: string) => [
+    "import ast, sys",
+    "",
+    "_stdin = sys.stdin.read().strip()",
+    `print(${fnName}(ast.literal_eval(_stdin)))`,
+].join("\n");
+
+const twoStringLinesAdapter = (fnName: string) => [
+    "import ast, sys",
+    "",
+    "_stdin = sys.stdin.read().strip()",
+    "_lines = [line.strip() for line in _stdin.splitlines() if line.strip()]",
+    "if len(_lines) >= 2:",
+    "    s, t = _lines[0], _lines[1]",
+    "else:",
+    "    try:",
+    "        data = ast.literal_eval(_stdin)",
+    "        if isinstance(data, dict):",
+    "            s = data[\"s\"]",
+    "            t = data[\"t\"]",
+    "        else:",
+    "            s, t = data",
+    "    except (SyntaxError, ValueError):",
+    "        if \",\" not in _stdin:",
+    "            raise ValueError(\"Expected two input lines, a comma-separated pair, a list/tuple, or a dict\")",
+    "        s, t = [part.strip() for part in _stdin.split(\",\", 1)]",
+    `print(${fnName}(s, t))`,
+].join("\n");
+
+const twoSumAdapter = [
+    "import ast, sys",
+    "",
+    "_stdin = sys.stdin.read().strip()",
+    "_lines = [line.strip() for line in _stdin.splitlines() if line.strip()]",
+    "if len(_lines) >= 2:",
+    "    nums = ast.literal_eval(_lines[0])",
+    "    target = int(_lines[1])",
+    "else:",
+    "    data = ast.literal_eval(_stdin)",
+    "    if isinstance(data, dict):",
+    "        nums = data[\"nums\"]",
+    "        target = data[\"target\"]",
+    "    else:",
+    "        nums, target = data",
+    "print(two_sum(nums, target))",
+].join("\n");
+
 export const CODING_PROMPTS: CodingPrompt[] = [
     {
         id: "reverse-string",
@@ -13,6 +76,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000"],
         starterCode: "def reverse_string(s: str) -> str:\n    pass\n",
+        functionName: "reverse_string",
+        stdinAdapter: rawStringAdapter("reverse_string"),
         testCases: [
             { args: ["hello"], expected: "olleh", hidden: false },
             { args: ["world"], expected: "dlrow", hidden: false },
@@ -33,6 +98,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= n <= 1000"],
         starterCode: "def fizzbuzz(n: int) -> list[str]:\n    pass\n",
+        functionName: "fizzbuzz",
+        stdinAdapter: intAdapter("fizzbuzz"),
         testCases: [
             { args: [1], expected: ["1"], hidden: false },
             { args: [5], expected: ["1", "2", "Fizz", "4", "Buzz"], hidden: false },
@@ -54,6 +121,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000", "s contains only lowercase letters"],
         starterCode: "def is_palindrome(s: str) -> bool:\n    pass\n",
+        functionName: "is_palindrome",
+        stdinAdapter: rawStringAdapter("is_palindrome"),
         testCases: [
             { args: ["racecar"], expected: true, hidden: false },
             { args: ["hello"], expected: false, hidden: false },
@@ -76,6 +145,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(nums) <= 1000", "-1000 <= nums[i] <= 1000"],
         starterCode: "def sum_of_list(nums: list[int]) -> int:\n    pass\n",
+        functionName: "sum_of_list",
+        stdinAdapter: literalAdapter("sum_of_list"),
         testCases: [
             { args: [[1, 2, 3, 4, 5]], expected: 15, hidden: false },
             { args: [[-1, 0, 1]], expected: 0, hidden: false },
@@ -98,6 +169,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(s) <= 1000"],
         starterCode: "def count_vowels(s: str) -> int:\n    pass\n",
+        functionName: "count_vowels",
+        stdinAdapter: rawStringAdapter("count_vowels"),
         testCases: [
             { args: ["hello"], expected: 2, hidden: false },
             { args: ["rhythm"], expected: 0, hidden: false },
@@ -120,6 +193,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= len(nums) <= 1000", "-10000 <= nums[i] <= 10000"],
         starterCode: "def find_max(nums: list[int]) -> int:\n    pass\n",
+        functionName: "find_max",
+        stdinAdapter: literalAdapter("find_max"),
         testCases: [
             { args: [[3, 1, 4, 1, 5, 9]], expected: 9, hidden: false },
             { args: [[-5, -1, -3]], expected: -1, hidden: false },
@@ -140,11 +215,13 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["2 <= len(nums) <= 1000", "Each input has exactly one solution"],
         starterCode: "def two_sum(nums: list[int], target: int) -> list[int]:\n    pass\n",
+        functionName: "two_sum",
+        stdinAdapter: twoSumAdapter,
         testCases: [
             { args: [[2, 7, 11, 15], 9], expected: [0, 1], hidden: false },
             { args: [[3, 2, 4], 6], expected: [1, 2], hidden: false },
             { args: [[3, 3], 6], expected: [0, 1], hidden: false },
-            { args: [[1, 5, 3, 2], 4], expected: [2, 3], hidden: false },
+            { args: [[1, 5, 3, 2], 4], expected: [0, 2], hidden: false },
             { args: [[-1, -2, -3, -4], -6], expected: [1, 3], hidden: false },
         ],
     },
@@ -160,6 +237,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["1 <= len(s), len(t) <= 1000", "s and t contain only lowercase letters"],
         starterCode: "def is_anagram(s: str, t: str) -> bool:\n    pass\n",
+        functionName: "is_anagram",
+        stdinAdapter: twoStringLinesAdapter("is_anagram"),
         testCases: [
             { args: ["anagram", "nagaram"], expected: true, hidden: false },
             { args: ["rat", "car"], expected: false, hidden: false },
@@ -181,6 +260,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= len(nums) <= 100", "Each inner list has 0 to 100 elements"],
         starterCode: "def flatten(nums: list[list[int]]) -> list[int]:\n    pass\n",
+        functionName: "flatten",
+        stdinAdapter: literalAdapter("flatten"),
         testCases: [
             { args: [[[1, 2], [3, 4], [5]]], expected: [1, 2, 3, 4, 5], hidden: false },
             { args: [[[1], [], [2, 3]]], expected: [1, 2, 3], hidden: false },
@@ -203,6 +284,8 @@ export const CODING_PROMPTS: CodingPrompt[] = [
         ],
         constraints: ["0 <= n <= 30"],
         starterCode: "def fibonacci(n: int) -> int:\n    pass\n",
+        functionName: "fibonacci",
+        stdinAdapter: intAdapter("fibonacci"),
         testCases: [
             { args: [0], expected: 0, hidden: false },
             { args: [1], expected: 1, hidden: false },

@@ -2,13 +2,14 @@ import type {
     Actor,
     CodingPrompt,
     ExecutionResult,
+    InterviewExecution,
     InterviewHistorySummary,
     InterviewSession,
     Room,
     RoomStatus,
+    TestResult,
 } from "@codedock/shared";
-
-const sessions = new Map<string, InterviewSession>();
+import { InterviewSessionModel } from "../models/InterviewSession.js";
 
 function normalizeActor(actor?: Partial<Actor>): Actor {
     return {
@@ -18,15 +19,68 @@ function normalizeActor(actor?: Partial<Actor>): Actor {
     };
 }
 
-function sameActor(a: Actor, b: Partial<Actor>) {
+function sameActorQuery(actor: Partial<Actor>) {
+    const clauses = [];
+    if (actor.userId) clauses.push({ "userId": actor.userId });
+    if (actor.guestId) clauses.push({ "guestId": actor.guestId });
+    return clauses;
+}
+
+function sessionCanView(session: InterviewSession, actor: Partial<Actor>) {
     return Boolean(
-        (a.userId && b.userId && a.userId === b.userId) ||
-        (a.guestId && b.guestId && a.guestId === b.guestId),
+        (actor.userId && session.interviewer.userId === actor.userId) ||
+        (actor.guestId && session.interviewer.guestId === actor.guestId) ||
+        session.candidates.some(
+            (candidate) =>
+                (actor.userId && candidate.userId === actor.userId) ||
+                (actor.guestId && candidate.guestId === actor.guestId),
+        ),
     );
 }
 
-function touch(session: InterviewSession) {
-    session.updatedAt = new Date().toISOString();
+function iso(value?: Date | string) {
+    return value ? new Date(value).toISOString() : undefined;
+}
+
+function toExecution(execution: InterviewExecution): InterviewExecution {
+    return {
+        kind: execution.kind || "code",
+        ranBy: execution.ranBy,
+        code: execution.code,
+        stdin: execution.stdin,
+        output: execution.output,
+        error: execution.error,
+        exitCode: execution.exitCode,
+        timedOut: execution.timedOut,
+        runtimeMs: execution.runtimeMs,
+        testResults: execution.testResults,
+        createdAt: iso(execution.createdAt) || new Date().toISOString(),
+    };
+}
+
+function toSession(doc: unknown): InterviewSession {
+    const raw = JSON.parse(JSON.stringify(doc)) as Omit<InterviewSession, "createdAt" | "updatedAt" | "closedAt"> & {
+        createdAt: string | Date;
+        updatedAt: string | Date;
+        closedAt?: string | Date;
+    };
+
+    return {
+        roomId: raw.roomId,
+        title: raw.title,
+        inviteCode: raw.inviteCode,
+        status: raw.status,
+        interviewer: raw.interviewer,
+        candidates: raw.candidates || [],
+        selectedPromptId: raw.selectedPromptId,
+        selectedPrompt: raw.selectedPrompt,
+        finalCode: raw.finalCode || "",
+        stdin: raw.stdin || "",
+        executions: (raw.executions || []).map(toExecution),
+        createdAt: iso(raw.createdAt) || new Date().toISOString(),
+        updatedAt: iso(raw.updatedAt) || new Date().toISOString(),
+        closedAt: iso(raw.closedAt),
+    };
 }
 
 function toSummary(session: InterviewSession): InterviewHistorySummary {
@@ -46,77 +100,86 @@ function toSummary(session: InterviewSession): InterviewHistorySummary {
     };
 }
 
-export function createHistorySession(room: Room, interviewer?: Partial<Actor>) {
-    const now = new Date().toISOString();
+export async function createHistorySession(room: Room, interviewer?: Partial<Actor>) {
     const actor = normalizeActor({
         guestId: interviewer?.guestId || room.creatorGuestId,
         username: interviewer?.username || room.creatorUsername,
         userId: interviewer?.userId,
     });
 
-    sessions.set(room.roomId, {
-        roomId: room.roomId,
-        title: room.title,
-        inviteCode: room.inviteCode,
-        status: room.status,
-        interviewer: actor,
-        candidates: [],
-        selectedPromptId: room.selectedPromptId,
-        selectedPrompt: null,
-        finalCode: "",
-        stdin: "",
-        executions: [],
-        createdAt: room.createdAt || now,
-        updatedAt: now,
-    });
+    await InterviewSessionModel.findOneAndUpdate(
+        { roomId: room.roomId },
+        {
+            $setOnInsert: {
+                roomId: room.roomId,
+                title: room.title,
+                inviteCode: room.inviteCode,
+                interviewer: actor,
+                candidates: [],
+                executions: [],
+                createdAt: room.createdAt || new Date().toISOString(),
+            },
+            $set: {
+                status: room.status,
+                selectedPromptId: room.selectedPromptId,
+            },
+        },
+        { upsert: true },
+    );
 }
 
-export function recordParticipantJoined(room: Room, actor?: Partial<Actor>) {
-    const session = sessions.get(room.roomId);
-    if (!session) return;
-
+export async function recordParticipantJoined(room: Room, actor?: Partial<Actor>) {
     const participant = normalizeActor(actor);
-    if (sameActor(session.interviewer, participant)) {
-        return;
-    }
+    const session = await InterviewSessionModel.findOne({ roomId: room.roomId });
+    if (!session) return;
 
-    if (!session.candidates.some((candidate) => sameActor(candidate, participant))) {
+    const isInterviewer =
+        (participant.userId && session.interviewer.userId === participant.userId) ||
+        (participant.guestId && session.interviewer.guestId === participant.guestId);
+
+    if (isInterviewer) return;
+
+    const exists = session.candidates.some(
+        (candidate) =>
+            (participant.userId && candidate.userId === participant.userId) ||
+            (participant.guestId && candidate.guestId === participant.guestId),
+    );
+
+    if (!exists) {
         session.candidates.push(participant);
+        await session.save();
     }
-
-    touch(session);
 }
 
-export function recordPromptSelected(roomId: string, promptId: string | null, prompt: CodingPrompt | null) {
-    const session = sessions.get(roomId);
-    if (!session) return;
-
-    session.selectedPromptId = promptId;
-    session.selectedPrompt = prompt;
-    touch(session);
+export async function recordPromptSelected(
+    roomId: string,
+    promptId: string | null,
+    prompt: CodingPrompt | null,
+) {
+    await InterviewSessionModel.findOneAndUpdate(
+        { roomId },
+        {
+            selectedPromptId: promptId,
+            selectedPrompt: prompt,
+        },
+    );
 }
 
-export function recordCodeChanged(roomId: string, code: string) {
-    const session = sessions.get(roomId);
-    if (!session) return;
-
-    session.finalCode = code;
-    touch(session);
+export async function recordCodeChanged(roomId: string, code: string) {
+    await InterviewSessionModel.findOneAndUpdate({ roomId }, { finalCode: code });
 }
 
-export function recordExecution(
+export async function recordExecution(
     roomId: string,
     actor: Partial<Actor>,
     code: string,
     stdin: string,
     result: ExecutionResult,
+    kind: "code" | "tests" = "code",
+    testResults?: TestResult[],
 ) {
-    const session = sessions.get(roomId);
-    if (!session) return;
-
-    session.finalCode = code;
-    session.stdin = stdin;
-    session.executions.push({
+    const execution: InterviewExecution = {
+        kind,
         ranBy: normalizeActor(actor),
         code,
         stdin,
@@ -125,44 +188,72 @@ export function recordExecution(
         exitCode: result.exitCode,
         timedOut: result.timedOut,
         runtimeMs: result.runtimeMs,
+        testResults,
         createdAt: new Date().toISOString(),
-    });
-    touch(session);
+    };
+
+    await InterviewSessionModel.findOneAndUpdate(
+        { roomId },
+        {
+            $set: {
+                finalCode: code,
+                stdin,
+            },
+            $push: { executions: execution },
+        },
+    );
 }
 
-export function recordRoomStatus(roomId: string, status: RoomStatus) {
-    const session = sessions.get(roomId);
-    if (!session) return;
-
-    session.status = status;
-    if (status === "inactive" && !session.closedAt) {
-        session.closedAt = new Date().toISOString();
-    }
-    touch(session);
+export async function recordRoomStatus(roomId: string, status: RoomStatus) {
+    await InterviewSessionModel.findOneAndUpdate(
+        { roomId },
+        {
+            $set: {
+                status,
+                ...(status === "inactive" ? { closedAt: new Date() } : {}),
+            },
+        },
+    );
 }
 
-export function listInterviewerHistory(actor: Partial<Actor>) {
-    return Array.from(sessions.values())
-        .filter((session) => sameActor(session.interviewer, actor))
-        .map(toSummary)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+export async function listInterviewerHistory(actor: Partial<Actor>) {
+    const actorClauses = sameActorQuery(actor);
+    if (actorClauses.length === 0) return [];
+
+    const docs = await InterviewSessionModel.find({
+        $or: actorClauses.map((clause) =>
+            Object.fromEntries(
+                Object.entries(clause).map(([key, value]) => [`interviewer.${key}`, value]),
+            ),
+        ),
+    })
+        .sort({ updatedAt: -1 })
+        .lean();
+
+    return docs.map((doc) => toSummary(toSession(doc)));
 }
 
-export function listCandidateHistory(actor: Partial<Actor>) {
-    return Array.from(sessions.values())
-        .filter((session) => session.candidates.some((candidate) => sameActor(candidate, actor)))
-        .map(toSummary)
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+export async function listCandidateHistory(actor: Partial<Actor>) {
+    const actorClauses = sameActorQuery(actor);
+    if (actorClauses.length === 0) return [];
+
+    const docs = await InterviewSessionModel.find({
+        $or: actorClauses.map((clause) =>
+            Object.fromEntries(
+                Object.entries(clause).map(([key, value]) => [`candidates.${key}`, value]),
+            ),
+        ),
+    })
+        .sort({ updatedAt: -1 })
+        .lean();
+
+    return docs.map((doc) => toSummary(toSession(doc)));
 }
 
-export function getHistorySession(roomId: string, actor: Partial<Actor>) {
-    const session = sessions.get(roomId);
-    if (!session) return undefined;
+export async function getHistorySession(roomId: string, actor: Partial<Actor>) {
+    const doc = await InterviewSessionModel.findOne({ roomId }).lean();
+    if (!doc) return undefined;
 
-    const canView =
-        sameActor(session.interviewer, actor) ||
-        session.candidates.some((candidate) => sameActor(candidate, actor));
-
-    return canView ? session : undefined;
+    const session = toSession(doc);
+    return sessionCanView(session, actor) ? session : undefined;
 }
-

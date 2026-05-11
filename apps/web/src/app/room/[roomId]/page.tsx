@@ -9,9 +9,11 @@ import type {
     CodeChangeMessage,
     Participant,
     Room,
+    RoomStatus,
     ExecutionResult,
     ExecutionFinishedMessage,
     CodingPrompt,
+    TestRunFinishedMessage,
     TestResult
 } from "@codedock/shared";
 import { socket, onPromptUpdated, offPromptUpdated } from "@/lib/socket";
@@ -26,6 +28,16 @@ type RoomPageProps = {
 
 const SERVER_URL =
     process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:4000";
+
+function formatPythonValue(value: unknown) {
+    if (typeof value === "string") return JSON.stringify(value);
+    return JSON.stringify(value);
+}
+
+function formatTestCall(functionName: string | undefined, args: unknown[] | undefined) {
+    if (!functionName || !args) return JSON.stringify(args ?? []);
+    return `${functionName}(${args.map(formatPythonValue).join(", ")})`;
+}
 
 export default function RoomPage({ params }: RoomPageProps) {
     const router = useRouter();
@@ -46,6 +58,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     const [activePromptId, setActivePromptId] = useState<string | null>(null);
     const [activePrompt, setActivePrompt] = useState<CodingPrompt | null>(null);
     const [testResults, setTestResults] = useState<TestResult[] | null>(null);
+    const [expandedTests, setExpandedTests] = useState<Record<number, boolean>>({});
     const [isTestRunning, setIsTestRunning] = useState(false);
     const [notice, setNotice] = useState("");
 
@@ -54,6 +67,7 @@ export default function RoomPage({ params }: RoomPageProps) {
     const activePromptRef = useRef<CodingPrompt | null>(null);
     const activePromptIdRef = useRef<string | null>(null);
     const codeRef = useRef(code);
+    const isInterviewEnded = room?.status === "inactive";
 
     useLayoutEffect(() => {
         codeRef.current = code;
@@ -90,6 +104,9 @@ export default function RoomPage({ params }: RoomPageProps) {
 
                 const data = await res.json();
                 setRoom(data);
+                if (data.status === "inactive") {
+                    setNotice("This interview has ended.");
+                }
 
                 if (data.selectedPromptId) {
                     setActivePromptId(data.selectedPromptId);
@@ -218,10 +235,33 @@ export default function RoomPage({ params }: RoomPageProps) {
             );
         }
 
+        function handleTestResults(result: TestRunFinishedMessage) {
+            setTestResults(result.results);
+            setExpandedTests({});
+
+            const passed = result.results.filter((test) => test.passed).length;
+            const total = result.results.length;
+            const summary = total > 0
+                ? `${passed} / ${total} tests passed`
+                : result.error || "No test results returned.";
+            const runtime = result.runtimeMs !== undefined ? ` in ${result.runtimeMs}ms` : "";
+
+            setOutput(`${result.ranBy} ran tests. ${summary}${runtime}`);
+        }
+
         function handleRoomJoined({ isCreator, code, stdin }: { isCreator: boolean; code: string; stdin: string }) {
             setIsCreator(isCreator);
             if (code) setCode(code);
             if (stdin) setStdin(stdin);
+        }
+
+        function handleRoomStatusChange({ status }: { status: RoomStatus }) {
+            setRoom((current) => current ? { ...current, status } : current);
+            if (status === "inactive") {
+                setNotice("This interview has ended.");
+                setIsRunning(false);
+                setIsTestRunning(false);
+            }
         }
 
         function handlePromptUpdated({
@@ -233,6 +273,8 @@ export default function RoomPage({ params }: RoomPageProps) {
         }) {
             setActivePromptId(promptId);
             setActivePrompt(prompt);
+            setTestResults(null);
+            setExpandedTests({});
         }
 
         function handleValidationError({
@@ -250,7 +292,9 @@ export default function RoomPage({ params }: RoomPageProps) {
         socket.on("room:code-change", handleCodeChange);
         socket.on("room:stdin-change", handleStdinChange);
         socket.on("room:execution-result", handleExecutionResult);
+        socket.on("room:test-results", handleTestResults);
         socket.on("room:joined", handleRoomJoined);
+        socket.on("room:status-change", handleRoomStatusChange);
         socket.on("room:validation-error", handleValidationError);
         onPromptUpdated(handlePromptUpdated);
 
@@ -260,13 +304,20 @@ export default function RoomPage({ params }: RoomPageProps) {
             socket.off("room:code-change", handleCodeChange);
             socket.off("room:stdin-change", handleStdinChange);
             socket.off("room:execution-result", handleExecutionResult);
+            socket.off("room:test-results", handleTestResults);
             socket.off("room:joined", handleRoomJoined);
+            socket.off("room:status-change", handleRoomStatusChange);
             socket.off("room:validation-error", handleValidationError);
             offPromptUpdated(handlePromptUpdated);
         };
     }, [roomId]);
 
     async function handleRunCode() {
+        if (isInterviewEnded) {
+            setOutput("This interview has ended.");
+            return;
+        }
+
         if (!code.trim()) {
             setOutput("No code to run.");
             return;
@@ -288,6 +339,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     language: "python",
                     code,
                     roomId,
+                    promptId: activePromptId,
                     username,
                     guestId,
                     input: stdin,
@@ -308,9 +360,15 @@ export default function RoomPage({ params }: RoomPageProps) {
     }
 
     async function handleRunTests() {
+        if (isInterviewEnded) {
+            setOutput("This interview has ended.");
+            return;
+        }
+
         if (!activePromptId) return;
         setIsTestRunning(true);
         setTestResults(null);
+        setExpandedTests({});
 
         const token = localStorage.getItem("codedock_token") ?? "";
 
@@ -321,15 +379,36 @@ export default function RoomPage({ params }: RoomPageProps) {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ roomId, promptId: activePromptId, code }),
+                body: JSON.stringify({
+                    language: "python",
+                    roomId,
+                    promptId: activePromptId,
+                    code,
+                    guestId,
+                    input: stdin,
+                }),
             });
             const data = await res.json();
-            setTestResults(data.results ?? null);
+            if (!res.ok) {
+                setOutput(data.error || "Something went wrong.");
+            } else if (data.results) {
+                setTestResults(data.results);
+            }
         } catch {
             setTestResults(null);
         } finally {
             setIsTestRunning(false);
         }
+    }
+
+    function handleEndInterview() {
+        if (!roomId || !isCreator || isInterviewEnded) return;
+
+        socket.emit("room:end-interview", {
+            roomId,
+            code,
+            stdin,
+        });
     }
 
     function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -371,12 +450,29 @@ export default function RoomPage({ params }: RoomPageProps) {
         <main className="min-h-screen bg-slate-950 text-white p-6">
             <div className="mx-auto max-w-7xl">
                 <header className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 p-5">
-                    <h1 className="text-3xl font-bold">{room.title}</h1>
-                    <p className="mt-2 text-slate-300">Room ID: {room.roomId}</p>
-                    <p className="text-slate-300">Invite Code: {room.inviteCode}</p>
-                    <p className="text-slate-300">
-                        You are: {username || "Loading..."}
-                    </p>
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <h1 className="text-3xl font-bold">{room.title}</h1>
+                            <p className="mt-2 text-slate-300">Room ID: {room.roomId}</p>
+                            <p className="text-slate-300">Invite Code: {room.inviteCode}</p>
+                            <p className="text-slate-300">
+                                You are: {username || "Loading..."}
+                            </p>
+                            {isInterviewEnded && (
+                                <p className="mt-3 rounded-lg border border-yellow-700 bg-yellow-950 px-3 py-2 text-sm text-yellow-200">
+                                    This interview has ended. The room is read-only and the completed session is available in history.
+                                </p>
+                            )}
+                        </div>
+                        {isCreator && !isInterviewEnded && (
+                            <button
+                                onClick={handleEndInterview}
+                                className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-500 cursor-pointer"
+                            >
+                                End Interview
+                            </button>
+                        )}
+                    </div>
                     {notice && (
                         <p className="mt-3 text-sm text-yellow-300">{notice}</p>
                     )}
@@ -386,7 +482,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <PromptPanel
                         roomId={roomId}
                         prompt={activePrompt}
-                        isCreator={isCreator}
+                        isCreator={isCreator && !isInterviewEnded}
                         promptId={activePromptId}
                     />
                 </div>
@@ -398,7 +494,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handleRunCode}
-                                    disabled={isRunning}
+                                    disabled={isRunning || isInterviewEnded}
                                     className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                                 >
                                     {isRunning ? "Running..." : "Run Python"}
@@ -406,7 +502,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 {activePromptId && (
                                     <button
                                         onClick={handleRunTests}
-                                        disabled={isTestRunning}
+                                        disabled={isTestRunning || isInterviewEnded}
                                         className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                                     >
                                         {isTestRunning ? "Testing..." : "Run Tests"}
@@ -422,6 +518,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 value={code}
                                 onChange={(value) => {
                                     const updatedCode = value || "";
+                                    if (isInterviewEnded) return;
                                     setCode(updatedCode);
 
                                     socket.emit("room:code-change", {
@@ -435,6 +532,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                     fontSize: 14,
                                     padding: { top: 16 },
                                     scrollBeyondLastLine: false,
+                                    readOnly: isInterviewEnded,
                                 }}
                             />
                         </div>
@@ -446,9 +544,11 @@ export default function RoomPage({ params }: RoomPageProps) {
                             <textarea
                                 value={stdin}
                                 onChange={(e) => {
+                                    if (isInterviewEnded) return;
                                     setStdin(e.target.value);
                                     socket.emit("room:stdin-change", { roomId, stdin: e.target.value, guestId });
                                 }}
+                                disabled={isInterviewEnded}
                                 placeholder="Enter input here (optional)..."
                                 spellCheck={false}
                                 className="mt-2 h-[100px] w-full resize-none rounded-xl border border-slate-700 bg-slate-950 p-3 font-mono text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-blue-500"
@@ -467,26 +567,47 @@ export default function RoomPage({ params }: RoomPageProps) {
                             <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5">
                                 <h2 className="text-xl font-semibold">Test Results</h2>
                                 <div className="mt-4 space-y-2">
-                                    {testResults.map((tc, i) => (
-                                        <div
-                                            key={i}
-                                            className={`rounded-lg border px-3 py-2 text-sm ${tc.passed
+                                    {testResults.map((tc, i) => {
+                                        const visibleTestCases = activePrompt?.testCases?.filter((test) => !test.hidden) ?? [];
+                                        const testCase = visibleTestCases[i];
+                                        const isExpanded = Boolean(expandedTests[i]);
+
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`rounded-lg border text-sm ${tc.passed
                                                     ? "border-emerald-700 bg-emerald-950 text-emerald-300"
                                                     : "border-red-700 bg-red-950 text-red-300"
                                                 }`}
-                                        >
-                                            <p className="font-medium">
-                                                {tc.passed ? "✓" : "✗"} Test {i + 1}
-                                            </p>
-                                            {!tc.passed && (
-                                                <div className="mt-1 font-mono text-xs space-y-0.5 text-slate-400">
-                                                    <p>Expected: {JSON.stringify(tc.expected)}</p>
-                                                    <p>Got: {JSON.stringify(tc.result)}</p>
-                                                    {tc.error && <p>Error: {tc.error}</p>}
-                                                </div>
-                                            )}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedTests((current) => ({
+                                                            ...current,
+                                                            [i]: !current[i],
+                                                        }))
+                                                    }
+                                                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left cursor-pointer"
+                                                >
+                                                    <span className="font-medium">
+                                                        {tc.passed ? "Passed" : "Failed"} Test {i + 1}
+                                                    </span>
+                                                    <span className="text-xs opacity-75">
+                                                        {isExpanded ? "Hide details" : "Show details"}
+                                                    </span>
+                                                </button>
+                                                {isExpanded && (
+                                                    <div className="border-t border-white/10 px-3 py-3 font-mono text-xs text-slate-300 space-y-2">
+                                                        <p>Input: {formatTestCall(activePrompt?.functionName, testCase?.args)}</p>
+                                                        <p>Expected: {JSON.stringify(tc.expected)}</p>
+                                                        <p>Got: {JSON.stringify(tc.result)}</p>
+                                                        {tc.error && <p>Error: {tc.error}</p>}
+                                                    </div>
+                                                )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                                 <p className="mt-3 text-xs text-slate-500">
                                     {testResults.filter((r) => r.passed).length} / {testResults.length} passed

@@ -10,10 +10,12 @@ import { recordExecution } from "../data/historyStore.js";
 import { CODING_PROMPTS } from "../data/prompts.js";
 import { requireAuth, type AuthRequest } from "../middleware/auth.js";
 import { runLimiter } from "../middleware/rateLimits.js";
+import { Room } from "../models/Room.js";
 import {
     validateCode,
     validateGuestId,
     validateLanguage,
+    validatePromptIdOrNull,
     validateRoomId,
     validateStdin,
 } from "../validation.js";
@@ -36,12 +38,14 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             let code: string;
             let input: string;
             let roomId: string | undefined;
+            let promptId: string | null;
             let guestId: string | undefined;
 
             try {
                 validateLanguage(req.body?.language ?? "python");
                 code = validateCode(req.body?.code);
                 input = validateStdin(req.body?.input);
+                promptId = validatePromptIdOrNull(req.body?.promptId);
                 guestId = validateGuestId(req.body?.guestId);
 
                 if (req.body?.roomId !== undefined && req.body?.roomId !== null) {
@@ -57,18 +61,34 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             const username = req.user?.username || "Anonymous";
 
             try {
+                if (roomId) {
+                    const room = await Room.findOne({ roomId });
+                    if (!room || room.status === "inactive") {
+                        return res.status(403).json({
+                            error: "This interview has ended",
+                        });
+                    }
+                }
+
+                const prompt = promptId
+                    ? CODING_PROMPTS.find((p) => p.id === promptId)
+                    : undefined;
+                const executableCode = prompt?.stdinAdapter
+                    ? `${code}\n\n${prompt.stdinAdapter}`
+                    : code;
+
                 const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
                     },
-                    body: JSON.stringify({ code, input }),
+                    body: JSON.stringify({ code: executableCode, input }),
                 });
 
                 const result = (await runnerResponse.json()) as ExecutionResult;
 
                 if (roomId) {
-                    recordExecution(
+                    await recordExecution(
                         roomId,
                         { userId, guestId, username },
                         code,
@@ -96,15 +116,33 @@ export function createRunRoutes(io: CodeDockSocketServer) {
         },
     );
 
-    router.post("/tests", async (req, res) => {
-        const { promptId, code } = req.body as {
+    router.post("/tests", requireAuth, runLimiter, async (req: AuthRequest, res) => {
+        const { promptId } = req.body as {
             promptId?: string;
-            code?: string;
         };
+        let code: string;
+        let roomId: string | undefined;
+        let input: string;
+        let guestId: string | undefined;
 
-        if (!promptId || !code) {
+        if (!promptId) {
             return res.status(400).json({
                 error: "promptId and code are required",
+            });
+        }
+
+        try {
+            validateLanguage(req.body?.language ?? "python");
+            code = validateCode(req.body?.code);
+            input = validateStdin(req.body?.input);
+            guestId = validateGuestId(req.body?.guestId);
+
+            if (req.body?.roomId !== undefined && req.body?.roomId !== null) {
+                roomId = validateRoomId(req.body.roomId);
+            }
+        } catch (err) {
+            return res.status(400).json({
+                error: typeof err === "string" ? err : "Invalid input",
             });
         }
 
@@ -120,9 +158,18 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             (tc: TestCase) => !tc.hidden,
         );
 
-        const harness = buildHarness(code, prompt.id, visibleTestCases);
+        const harness = buildHarness(code, prompt.functionName, visibleTestCases);
 
         try {
+            if (roomId) {
+                const room = await Room.findOne({ roomId });
+                if (!room || room.status === "inactive") {
+                    return res.status(403).json({
+                        error: "This interview has ended",
+                    });
+                }
+            }
+
             const runnerResponse = await fetch(`${RUNNER_URL}/run/python`, {
                 method: "POST",
                 headers: {
@@ -134,6 +181,30 @@ export function createRunRoutes(io: CodeDockSocketServer) {
             const result = (await runnerResponse.json()) as ExecutionResult;
 
             if (result.timedOut) {
+                if (roomId) {
+                    await recordExecution(
+                        roomId,
+                        {
+                            userId: req.user?.userId,
+                            guestId,
+                            username: req.user?.username || "Anonymous",
+                        },
+                        code,
+                        input,
+                        result,
+                        "tests",
+                        [],
+                    );
+
+                    io.to(roomId).emit("room:test-results", {
+                        results: [],
+                        error: "Code timed out",
+                        ranBy: req.user?.username || "Anonymous",
+                        sentAt: new Date().toISOString(),
+                        runtimeMs: result.runtimeMs,
+                    });
+                }
+
                 return res.json({
                     error: "Code timed out",
                     results: [],
@@ -145,6 +216,38 @@ export function createRunRoutes(io: CodeDockSocketServer) {
                 result.error,
                 visibleTestCases,
             );
+
+            if (roomId) {
+                const passed = results.filter((test) => test.passed).length;
+                const summary: ExecutionResult = {
+                    output: `${passed} / ${results.length} tests passed`,
+                    error: result.error,
+                    exitCode: result.exitCode,
+                    timedOut: result.timedOut,
+                    runtimeMs: result.runtimeMs,
+                };
+
+                await recordExecution(
+                    roomId,
+                    {
+                        userId: req.user?.userId,
+                        guestId,
+                        username: req.user?.username || "Anonymous",
+                    },
+                    code,
+                    input,
+                    summary,
+                    "tests",
+                    results,
+                );
+
+                io.to(roomId).emit("room:test-results", {
+                    results,
+                    ranBy: req.user?.username || "Anonymous",
+                    sentAt: new Date().toISOString(),
+                    runtimeMs: result.runtimeMs,
+                });
+            }
 
             return res.json({ results });
         } catch {
@@ -159,10 +262,9 @@ export function createRunRoutes(io: CodeDockSocketServer) {
 
 function buildHarness(
     code: string,
-    promptId: string,
+    functionName: string,
     testCases: TestCase[],
 ): string {
-    const fnName = promptId.replace(/-/g, "_");
     const lines: string[] = [];
 
     lines.push(code);
@@ -178,7 +280,7 @@ function buildHarness(
         lines.push("try:");
         lines.push(`    args = json.loads(${argsJson})`);
         lines.push(`    expected = json.loads(${expectedJson})`);
-        lines.push(`    result = ${fnName}(*args)`);
+        lines.push(`    result = ${functionName}(*args)`);
         lines.push("    passed = result == expected");
         lines.push(
             `    results.append({"index": ${i}, "passed": passed, "result": result, "expected": expected, "error": None})`,

@@ -47,7 +47,7 @@ router.post("/", requireAuth, roomCreateLimiter, async (req: AuthRequest, res) =
             $push: { roomsJoined: { roomId: room.roomId } },
         });
 
-        createHistorySession(
+        await createHistorySession(
             {
                 roomId: room.roomId,
                 title: room.title,
@@ -108,7 +108,7 @@ router.post("/join", requireAuth, roomJoinLimiter, async (req: AuthRequest, res)
             $addToSet: { roomsJoined: { roomId: room.roomId } },
         });
 
-        recordParticipantJoined(
+        await recordParticipantJoined(
             {
                 roomId: room.roomId,
                 title: room.title,
@@ -189,6 +189,9 @@ router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
         if (!room) {
             return res.status(404).json({ error: "Room not found" });
         }
+        if (room.selectedPromptId) {
+            return res.status(409).json({ error: "Prompt has already been assigned" });
+        }
 
         room.selectedPromptId = promptId;
         await room.save();
@@ -196,7 +199,7 @@ router.patch("/:roomId/prompt", requireAuth, async (req: AuthRequest, res) => {
         const prompt = room.selectedPromptId
             ? CODING_PROMPTS.find((p: { id: string }) => p.id === room.selectedPromptId) ?? null
             : null;
-        recordPromptSelected(roomId, room.selectedPromptId, prompt);
+        await recordPromptSelected(roomId, room.selectedPromptId, prompt);
 
         return res.json({ roomId, selectedPromptId: room.selectedPromptId });
     } catch (err) {
@@ -229,7 +232,7 @@ router.patch("/:roomId/status", requireAuth, async (req: AuthRequest, res) => {
 
         room.status = status;
         await room.save();
-        recordRoomStatus(roomId, status);
+        await recordRoomStatus(roomId, status);
 
         return res.json({
             roomId: room.roomId,
