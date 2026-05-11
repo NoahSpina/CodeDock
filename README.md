@@ -32,12 +32,6 @@ The runner service uses Docker to execute submitted Python code inside isolated 
 
 The required `.env` files are included in the submission. Example environment files are also provided to show the required variables for each service.
 
-## Seeding
-Make sure MongoDB is running and then, from the project root, run: 
-```bash
-npm run seed -w apps/server
-```
-
 ## Deployed Demo
 
 A live demo of CodeDock is currently deployed on DigitalOcean: http://143.198.161.125:3000
@@ -50,6 +44,21 @@ From the project root, run:
 ```bash
 docker compose up
 ```
+This starts the frontend, backend server, runner service, and MongoDB.
+
+## Seeding
+Make sure the app is running (via docker compose) and then, from the project root in another terminal, run: 
+```bash
+docker compose exec server npm run seed -w apps/server
+```
+
+This adds the following user:
+
+Username: seed_user
+
+Email: seed@codedock.dev
+
+Password: seedpass123
 
 ## Local Development without Docker Compose
 
