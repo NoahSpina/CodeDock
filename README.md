@@ -28,10 +28,25 @@ Before locally running the project, make sure you have:
 
 The runner service uses Docker to execute submitted Python code inside isolated containers, so Docker must be running.
 
+## Environment Variables
+
+The required `.env` files are included in the submission. Example environment files are also provided to show the required variables for each service.
+
+## Seeding
+Make sure MongoDB is running and then, from the project root, run: 
+```bash
+npm run seed -w apps/server
+```
+
+## Deployed Demo
+
+A live demo of CodeDock is currently deployed on DigitalOcean: http://143.198.161.125:3000
+
+This deployment is intended for course grading/demo purposes only and will be taken down after the class ends on May 18, 2026.
+
 ## Quick Start with Docker Compose
 
 From the project root, run:
-
 ```bash
 docker compose up
 ```
